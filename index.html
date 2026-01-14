@@ -389,7 +389,8 @@
         const totalDays = 6;
         let isFirstLoad = true;
         let tempLatLng = null;
-        let EXCHANGE_RATE = 9.1;
+        let EXCHANGE_RATE = 9.1; // 1 JPY = 9.1 KRW (Default)
+        let EXCHANGE_RATE_USD = 0.0067; // 1 JPY = 0.0067 USD (Default)
         
         window.tripItems = [];
         window.candidateItems = [];
@@ -500,7 +501,7 @@
             }
         };
 
-        // Edit Function - Fixed Logic
+        // Edit Function - Fixed Logic (Safe Element Access)
         window.editItem = async (id, isCandidate = false) => {
             let item;
             if (isCandidate) {
@@ -511,8 +512,8 @@
             
             if(!item) return alert("항목을 찾을 수 없습니다.");
 
-            // 1. Open Modal FIRST (this resets editingId inside openAddScheduleModal if logic was there, but we will fix that)
-            // We pass null lat/lng so it doesn't try to reverse-geocode immediately, we will fill it from item
+            // 1. Open Modal FIRST (this resets editingId, so we set it back later)
+            // We pass null lat/lng so it doesn't try to reverse-geocode immediately
             await openAddScheduleModal(item.lat, item.lng, item.category, isCandidate);
 
             // 2. Set editingId AFTER opening modal so it persists
@@ -534,19 +535,35 @@
                 document.getElementById('picker_common').checked = true;
             }
 
-            if(item.time) document.getElementById('addTime').value = item.time;
-            if(item.depTime) document.getElementById('addDepTime').value = item.depTime;
-            if(item.arrTime) document.getElementById('addArrTime').value = item.arrTime;
-            if(item.checkIn) document.getElementById('addCheckIn').value = item.checkIn;
-            if(item.checkOut) document.getElementById('addCheckOut').value = item.checkOut;
+            // Safe Assignment Logic: Check if element exists before assigning value
+            // Because updateDynamicFields might have removed 'addTime' if it's a flight/hotel
+            const timeEl = document.getElementById('addTime');
+            if(timeEl && item.time) timeEl.value = item.time;
+
+            const depEl = document.getElementById('addDepTime');
+            if(depEl && item.depTime) depEl.value = item.depTime;
+
+            const arrEl = document.getElementById('addArrTime');
+            if(arrEl && item.arrTime) arrEl.value = item.arrTime;
+
+            const checkInEl = document.getElementById('addCheckIn');
+            if(checkInEl && item.checkIn) checkInEl.value = item.checkIn;
+
+            const checkOutEl = document.getElementById('addCheckOut');
+            if(checkOutEl && item.checkOut) checkOutEl.value = item.checkOut;
 
             window.currentCurrency = 'JPY';
             document.getElementById('addCost').value = item.cost || 0;
             window.calcConversion(item.cost || 0);
 
-            if(document.getElementById('addMenu')) document.getElementById('addMenu').value = item.menu || '';
-            if(document.getElementById('addReserved')) document.getElementById('addReserved').checked = item.isReserved || false;
-            if(document.getElementById('addFlightNum')) document.getElementById('addFlightNum').value = item.flightNum || '';
+            const menuEl = document.getElementById('addMenu');
+            if(menuEl) menuEl.value = item.menu || '';
+
+            const reservedEl = document.getElementById('addReserved');
+            if(reservedEl) reservedEl.checked = item.isReserved || false;
+
+            const flightNumEl = document.getElementById('addFlightNum');
+            if(flightNumEl) flightNumEl.value = item.flightNum || '';
             
             if (item.moveType) {
                 const moveRadio = document.querySelector(`input[name="moveType"][value="${item.moveType}"]`);
@@ -639,7 +656,8 @@
                 const data = await res.json();
                 if (data && data.rates && data.rates.KRW) {
                     EXCHANGE_RATE = data.rates.KRW;
-                    document.getElementById('exchangeRateDisplay').innerText = `현재 환율: ¥100 = ₩${(EXCHANGE_RATE * 100).toFixed(0)}`;
+                    EXCHANGE_RATE_USD = data.rates.USD || 0.0067;
+                    document.getElementById('exchangeRateDisplay').innerText = `현재 환율: ¥100 = ₩${(EXCHANGE_RATE * 100).toFixed(0)} | $${(EXCHANGE_RATE_USD * 100).toFixed(2)}`;
                 }
             } catch (e) {
                 document.getElementById('exchangeRateDisplay').innerText = `예상 환율: ¥100 = ₩910 (기본값)`;
@@ -810,7 +828,10 @@
             let costJPY = 0;
             if (costInput && costInput.value) {
                 const val = parseInt(costInput.value) || 0;
-                costJPY = window.currentCurrency === 'JPY' ? val : Math.round(val / EXCHANGE_RATE);
+                // Simple Currency Conversion for Save
+                if (window.currentCurrency === 'JPY') costJPY = val;
+                else if (window.currentCurrency === 'KRW') costJPY = Math.round(val / EXCHANGE_RATE);
+                else if (window.currentCurrency === 'USD') costJPY = Math.round(val / EXCHANGE_RATE_USD);
             }
 
             const menu = document.getElementById('addMenu')?.value || '';
@@ -895,10 +916,22 @@
              
              timeSection.innerHTML = `<label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">시간</label><input type="time" id="addTime" class="w-full p-3 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:bg-white">`;
 
+             // Cost Input with USD added
              const getCostInput = (label = '예상 비용') => `
                 <div class="bg-white p-3 rounded-lg border border-indigo-100 shadow-sm">
-                    <div class="flex justify-between items-center mb-2"><label class="text-xs font-bold text-slate-600">${label}</label><div class="flex bg-slate-100 rounded-md p-0.5"><button type="button" onclick="setCurrency('JPY')" id="btn-JPY" class="px-2 py-0.5 text-[10px] font-bold rounded ${window.currentCurrency==='JPY'?'bg-white shadow text-indigo-600':'text-slate-400'}">JPY</button><button type="button" onclick="setCurrency('KRW')" id="btn-KRW" class="px-2 py-0.5 text-[10px] font-bold rounded ${window.currentCurrency==='KRW'?'bg-white shadow text-indigo-600':'text-slate-400'}">KRW</button></div></div>
-                    <div class="flex items-center gap-2"><span class="text-sm font-bold text-slate-400 w-4 text-center" id="currencySymbol">¥</span><input type="number" id="addCost" oninput="calcConversion(this.value)" class="flex-1 p-1 bg-transparent border-b border-slate-200 text-sm font-bold text-right focus:outline-none focus:border-indigo-500" placeholder="0"></div><div class="text-right text-xs text-indigo-500 font-bold mt-1" id="convertedPreview">≈ 0원</div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-xs font-bold text-slate-600">${label}</label>
+                        <div class="flex bg-slate-100 rounded-md p-0.5">
+                            <button type="button" onclick="setCurrency('JPY')" id="btn-JPY" class="px-2 py-0.5 text-[10px] font-bold rounded ${window.currentCurrency==='JPY'?'bg-white shadow text-indigo-600':'text-slate-400'}">JPY</button>
+                            <button type="button" onclick="setCurrency('KRW')" id="btn-KRW" class="px-2 py-0.5 text-[10px] font-bold rounded ${window.currentCurrency==='KRW'?'bg-white shadow text-indigo-600':'text-slate-400'}">KRW</button>
+                            <button type="button" onclick="setCurrency('USD')" id="btn-USD" class="px-2 py-0.5 text-[10px] font-bold rounded ${window.currentCurrency==='USD'?'bg-white shadow text-indigo-600':'text-slate-400'}">USD</button>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-bold text-slate-400 w-4 text-center" id="currencySymbol">¥</span>
+                        <input type="number" id="addCost" oninput="calcConversion(this.value)" class="flex-1 p-1 bg-transparent border-b border-slate-200 text-sm font-bold text-right focus:outline-none focus:border-indigo-500" placeholder="0">
+                    </div>
+                    <div class="text-right text-xs text-indigo-500 font-bold mt-1" id="convertedPreview">≈ 0원</div>
                 </div>`;
 
              if(catId === 'flight') {
@@ -920,8 +953,45 @@
         };
 
         window.toggleTransportCost = (show) => { const f=document.getElementById('moveCostField'); if(show){f.classList.remove('hidden');}else{f.classList.add('hidden');} };
-        window.setCurrency = (curr) => { window.currentCurrency = curr; document.getElementById('btn-JPY').className = `px-2 py-0.5 text-[10px] font-bold rounded ${curr==='JPY'?'bg-white shadow text-indigo-600':'text-slate-400'}`; document.getElementById('btn-KRW').className = `px-2 py-0.5 text-[10px] font-bold rounded ${curr==='KRW'?'bg-white shadow text-indigo-600':'text-slate-400'}`; document.getElementById('currencySymbol').innerText = curr === 'JPY' ? '¥' : '₩'; const val = document.getElementById('addCost').value; if(val) window.calcConversion(val); };
-        window.calcConversion = (val) => { if(!val){document.getElementById('convertedPreview').innerText='';return;} if(window.currentCurrency==='JPY'){const krw=Math.round(val*EXCHANGE_RATE);document.getElementById('convertedPreview').innerText=`≈ ${krw.toLocaleString()}원`;}else{const jpy=Math.round(val/EXCHANGE_RATE);document.getElementById('convertedPreview').innerText=`≈ ${jpy.toLocaleString()}엔`;} };
+        
+        window.setCurrency = (curr) => { 
+            window.currentCurrency = curr; 
+            document.getElementById('btn-JPY').className = `px-2 py-0.5 text-[10px] font-bold rounded ${curr==='JPY'?'bg-white shadow text-indigo-600':'text-slate-400'}`; 
+            document.getElementById('btn-KRW').className = `px-2 py-0.5 text-[10px] font-bold rounded ${curr==='KRW'?'bg-white shadow text-indigo-600':'text-slate-400'}`; 
+            document.getElementById('btn-USD').className = `px-2 py-0.5 text-[10px] font-bold rounded ${curr==='USD'?'bg-white shadow text-indigo-600':'text-slate-400'}`; 
+            
+            let symbol = '¥';
+            if(curr === 'KRW') symbol = '₩';
+            if(curr === 'USD') symbol = '$';
+            document.getElementById('currencySymbol').innerText = symbol; 
+            
+            const val = document.getElementById('addCost').value; 
+            if(val) window.calcConversion(val); 
+        };
+        
+        window.calcConversion = (val) => { 
+            if(!val){ document.getElementById('convertedPreview').innerText=''; return; } 
+            
+            let jpy = 0;
+            // First convert to JPY (Base)
+            if(window.currentCurrency === 'JPY') jpy = val;
+            else if(window.currentCurrency === 'KRW') jpy = val / EXCHANGE_RATE;
+            else if(window.currentCurrency === 'USD') jpy = val / EXCHANGE_RATE_USD;
+
+            // Then display others
+            let krw = Math.round(jpy * EXCHANGE_RATE);
+            let usd = (jpy * EXCHANGE_RATE_USD).toFixed(2);
+            let jpyDisp = Math.round(jpy);
+
+            if(window.currentCurrency === 'JPY') {
+                document.getElementById('convertedPreview').innerText = `≈ ${krw.toLocaleString()}원 / $${usd}`;
+            } else if(window.currentCurrency === 'KRW') {
+                document.getElementById('convertedPreview').innerText = `≈ ${jpyDisp.toLocaleString()}엔 / $${usd}`;
+            } else {
+                document.getElementById('convertedPreview').innerText = `≈ ${jpyDisp.toLocaleString()}엔 / ${krw.toLocaleString()}원`;
+            }
+        };
+
         async function updateMapWeather(lat, lng) { try{const res=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`);const data=await res.json();if(data&&data.current_weather){document.getElementById('weatherTemp').innerText=`${data.current_weather.temperature}°C`;document.getElementById('weatherDesc').innerText=getWeatherIcon(data.current_weather.weathercode).desc;document.getElementById('weatherIcon').innerHTML=getWeatherIcon(data.current_weather.weathercode).icon;}}catch(e){} }
         function getWeatherIcon(code) { if(code===0)return{icon:'<i class="fa-solid fa-sun text-orange-400"></i>',desc:'맑음'}; return{icon:'<i class="fa-solid fa-cloud text-slate-400"></i>',desc:'흐림'}; }
 
@@ -1057,7 +1127,6 @@
                         </div>`;
                     }
 
-                    // Add Pin Icon for Fixed Items
                     let pinBadge = '';
                     if (isFixed) {
                         pinBadge = `<div class="absolute -top-2 -right-2 bg-white text-indigo-500 w-7 h-7 flex items-center justify-center rounded-full border border-indigo-100 shadow-sm z-20" title="Fixed Schedule"><i class="fa-solid fa-thumbtack transform rotate-45 text-xs"></i></div>`;
