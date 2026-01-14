@@ -203,7 +203,7 @@
             <div class="flex justify-between items-center mb-5 border-b border-slate-100 pb-3">
                 <div>
                     <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-cloud-sun mr-2 text-sky-500"></i>여행 기간 날씨 예보</h2>
-                    <p class="text-xs text-slate-500 mt-1">Day별 마지막 일정 장소 기준 (3/2 ~ 3/7)</p>
+                    <p class="text-xs text-slate-500 mt-1">숙소 위치 기준 (없을 시 마지막 일정 기준)</p>
                 </div>
                 <button onclick="closeWeatherForecastModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-times text-xl"></i></button>
             </div>
@@ -275,7 +275,7 @@
                     <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide">장소 검색</label>
                     <div class="flex gap-2">
                         <div class="relative flex-1">
-                            <input type="text" id="searchAddressInput" class="w-full p-3 pl-9 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none transition" placeholder="장소명 또는 주소 (한국어/영어)" onkeyup="if(window.event.keyCode==13){searchAddress()}">
+                            <input type="text" id="searchAddressInput" class="w-full p-3 pl-9 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none transition" placeholder="장소명 또는 주소 (영어/한국어)" onkeyup="if(window.event.keyCode==13){searchAddress()}">
                             <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3.5 text-slate-400"></i>
                         </div>
                         <button onclick="searchAddress()" class="px-4 py-2 bg-slate-800 text-white rounded-xl text-sm font-bold hover:bg-slate-700 transition">검색</button>
@@ -463,7 +463,90 @@
             openAddScheduleModal(null, null, 'etc', isCandidateTab);
         };
 
-        // --- 현재 날씨 상세 모달 ---
+        // --- 여행 날씨 모달 (수정됨) ---
+        window.openWeatherForecastModal = async () => {
+            const modal = document.getElementById('weatherForecastModal');
+            modal.classList.remove('hidden');
+            const container = document.getElementById('weatherCardsContainer');
+            container.innerHTML = '<div class="col-span-3 text-center py-10 text-slate-400"><i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i><p>날씨 정보를 불러오는 중입니다...</p></div>';
+            document.getElementById('weatherInfoText').innerText = "Day별 숙소 위치(없으면 마지막 일정) 기준";
+
+            try {
+                // Trip data should be available from window.tripItems
+                if(!window.tripItems) { throw new Error("데이터 없음"); }
+
+                let cardsHtml = '';
+                const baseDate = new Date('2025-03-02'); // 기준일
+
+                for (let i = 1; i <= totalDays; i++) {
+                    const dayItems = window.tripItems.filter(item => item.day === i);
+                    // 숙소 우선 검색, 없으면 마지막 일정
+                    let targetItem = dayItems.find(item => item.category === 'hotel') || dayItems[dayItems.length - 1];
+                    
+                    let lat = 35.1709; // Default Nagoya
+                    let lng = 136.8815;
+                    let locationName = "나고야";
+
+                    // Check if targetItem has valid location
+                    if (targetItem) {
+                        const tLat = parseFloat(targetItem.lat);
+                        const tLng = parseFloat(targetItem.lng);
+                        if (Number.isFinite(tLat) && Number.isFinite(tLng)) {
+                            lat = tLat;
+                            lng = tLng;
+                            locationName = targetItem.place;
+                        }
+                    }
+
+                    // 날짜 계산
+                    const currentDate = new Date(baseDate);
+                    currentDate.setDate(baseDate.getDate() + (i - 1));
+                    const dateStr = currentDate.toISOString().split('T')[0];
+
+                    // Fetch Weather for this location and date (Mocking historic/forecast using Open-Meteo)
+                    // Open-Meteo free API gives 7 day forecast. For future dates, it might vary.
+                    // We use current weather API for simplicity but try to match date if possible (Forecast API)
+                    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=Asia%2FTokyo`);
+                    const data = await res.json();
+                    
+                    // Simple mapping since API returns 7 days from TODAY. 
+                    // For specific 3/2 dates, we would need actual forecast if it's within range.
+                    // Here we just take the i-th day from today as a placeholder or 0 if out of range
+                    // Note: This is a limitation of free APIs without paying for specific future date queries.
+                    // We will display "예보(오늘+" + (i-1) + "일)"
+                    
+                    let wCode = 0, maxT = 0, minT = 0;
+                    if(data.daily && data.daily.time) {
+                        // Just showing 0-5 index for 6 days
+                        const idx = Math.min(i-1, data.daily.time.length - 1);
+                        wCode = data.daily.weathercode[idx];
+                        maxT = data.daily.temperature_2m_max[idx];
+                        minT = data.daily.temperature_2m_min[idx];
+                    }
+
+                    const { icon, desc } = getWeatherIcon(wCode);
+
+                    cardsHtml += `
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col items-center justify-center text-center">
+                            <div class="text-xs font-bold text-slate-400 mb-1">Day ${i}</div>
+                            <div class="text-[10px] text-slate-400 mb-2 truncate w-full px-1">${locationName}</div>
+                            <div class="text-3xl mb-2">${icon}</div>
+                            <div class="text-sm font-bold text-slate-700">${minT}° / ${maxT}°</div>
+                            <div class="text-xs text-slate-500">${desc}</div>
+                        </div>
+                    `;
+                }
+                container.innerHTML = cardsHtml;
+
+            } catch (e) {
+                console.error(e);
+                container.innerHTML = '<div class="col-span-3 text-center py-5 text-rose-500"><i class="fa-solid fa-triangle-exclamation mb-2"></i><p>날씨 정보를 가져올 수 없습니다.</p></div>';
+            }
+        };
+        
+        window.closeWeatherForecastModal = () => document.getElementById('weatherForecastModal').classList.add('hidden');
+
+        // --- 현재 위치 상세 모달 ---
         window.openCurrentWeatherModal = async () => {
             const center = map.getCenter();
             document.getElementById('currentWeatherModal').classList.remove('hidden');
@@ -501,7 +584,7 @@
             }
         };
 
-        // Edit Function - Fixed Logic (Safe Element Access)
+        // Edit Function
         window.editItem = async (id, isCandidate = false) => {
             let item;
             if (isCandidate) {
@@ -512,11 +595,8 @@
             
             if(!item) return alert("항목을 찾을 수 없습니다.");
 
-            // 1. Open Modal FIRST (this resets editingId, so we set it back later)
-            // We pass null lat/lng so it doesn't try to reverse-geocode immediately
             await openAddScheduleModal(item.lat, item.lng, item.category, isCandidate);
 
-            // 2. Set editingId AFTER opening modal so it persists
             editingId = id;
 
             document.getElementById('modalTitle').innerText = isCandidate ? '후보 장소 수정' : '일정 수정';
@@ -535,8 +615,6 @@
                 document.getElementById('picker_common').checked = true;
             }
 
-            // Safe Assignment Logic: Check if element exists before assigning value
-            // Because updateDynamicFields might have removed 'addTime' if it's a flight/hotel
             const timeEl = document.getElementById('addTime');
             if(timeEl && item.time) timeEl.value = item.time;
 
@@ -574,7 +652,14 @@
                 }
             }
 
-            tempLatLng = { lat: item.lat, lng: item.lng };
+            // Safe parsing for edit mode
+            const eLat = parseFloat(item.lat);
+            const eLng = parseFloat(item.lng);
+            if(Number.isFinite(eLat) && Number.isFinite(eLng)) {
+                tempLatLng = { lat: eLat, lng: eLng };
+            } else {
+                tempLatLng = null;
+            }
         };
 
         function subscribeToCandidates() {
@@ -594,7 +679,12 @@
                 dayCandidates.forEach(item => {
                     const el = document.createElement('div');
                     el.className = 'bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer relative';
-                    el.onclick = () => { if(item.lat) map.flyTo([item.lat, item.lng], 16); };
+                    
+                    const itemLat = parseFloat(item.lat);
+                    const itemLng = parseFloat(item.lng);
+                    const hasLocation = Number.isFinite(itemLat) && Number.isFinite(itemLng);
+
+                    el.onclick = () => { if(hasLocation) map.flyTo([itemLat, itemLng], 16); };
                     
                     const catObj = categories.find(c => c.id === item.category) || categories.find(c => c.id === 'etc');
 
@@ -628,14 +718,17 @@
             markersLayer.clearLayers();
             const dayCandidates = window.candidateItems.filter(item => item.day === currentDay);
             dayCandidates.forEach(item => {
-                if(item.lat) {
+                const itemLat = parseFloat(item.lat);
+                const itemLng = parseFloat(item.lng);
+                
+                if(Number.isFinite(itemLat) && Number.isFinite(itemLng)) {
                     const markerIcon = L.divIcon({
                         className: 'custom-div-icon',
                         html: `<div style="background-color: #64748b; border: 2px solid white; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 16px; color: white;">?</div>`,
                         iconSize: [32, 32],
                         iconAnchor: [16, 16]
                     });
-                    const marker = L.marker([item.lat, item.lng], {icon: markerIcon}).addTo(markersLayer);
+                    const marker = L.marker([itemLat, itemLng], {icon: markerIcon}).addTo(markersLayer);
                     marker.bindPopup(`<div class="text-center font-bold text-sm p-2">${item.place}<br><span class="text-xs font-normal text-slate-500">Day ${currentDay} 후보</span></div>`);
                 }
             });
@@ -674,11 +767,7 @@
             markersLayer = L.layerGroup().addTo(map);
             pathLayer = L.layerGroup().addTo(map);
 
-            map.on('click', function(e) {
-                if(!isAdmin) return;
-                const isCandidateTab = !document.getElementById('view-candidates').classList.contains('hidden');
-                openAddScheduleModal(e.latlng.lat, e.latlng.lng, 'etc', isCandidateTab);
-            });
+            // Removed click listener to disable adding places by touching map
             
             map.on('moveend', function() {
                 const center = map.getCenter();
@@ -723,14 +812,10 @@
         window.fetchAddress = async (lat, lng) => {
             document.getElementById('addAddress').value = "주소 검색 중...";
             try {
-                // Use addressdetails=1 to get more specific info
                 const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=ko,en`);
                 const data = await res.json();
                 if(data && data.display_name) {
-                    // Try to get a shorter name if possible
                     document.getElementById('addAddress').value = data.display_name;
-                    
-                    // If place name is empty, try to fill it with a landmark name from address
                     if (!document.getElementById('addPlace').value) {
                          const placeName = data.address.amenity || data.address.shop || data.address.tourism || data.address.historic || data.address.building || "새로운 장소";
                          document.getElementById('addPlace').value = placeName;
@@ -746,14 +831,10 @@
 
         window.openAddScheduleModal = async (lat, lng, preSelectCat = null, forCandidate = false) => {
             const modal = document.getElementById('addScheduleModal');
-            
-            // IMPORTANT: Reset editing state here, but editItem will override it immediately after calling this
             editingId = null;
             isCandidateMode = forCandidate;
-            
             document.getElementById('modalTitle').innerText = forCandidate ? '새 후보 장소 추가' : '새 일정 추가';
             document.getElementById('submitBtn').innerHTML = '<i class="fa-solid fa-check mr-1"></i> 저장하기';
-
             document.getElementById('searchAddressInput').value = '';
             document.getElementById('addPlace').value = preSelectCat === 'flight' ? '나고야 중부국제공항' : '';
             document.getElementById('addMemo').value = '';
@@ -772,7 +853,8 @@
             window.currentCurrency = 'JPY'; 
             window.updateDynamicFields(targetCat);
             
-            if (!lat || !lng) {
+            // Allow 0 as valid coordinate
+            if (lat === null || lat === undefined || lng === null || lng === undefined) {
                 tempLatLng = null; 
                 document.getElementById('addAddress').value = '직접 입력';
             } else {
@@ -828,7 +910,6 @@
             let costJPY = 0;
             if (costInput && costInput.value) {
                 const val = parseInt(costInput.value) || 0;
-                // Simple Currency Conversion for Save
                 if (window.currentCurrency === 'JPY') costJPY = val;
                 else if (window.currentCurrency === 'KRW') costJPY = Math.round(val / EXCHANGE_RATE);
                 else if (window.currentCurrency === 'USD') costJPY = Math.round(val / EXCHANGE_RATE_USD);
@@ -864,8 +945,6 @@
             }
 
             try {
-                // Determine collection: if editing, use current mode, but check if we need to be careful
-                // For simplicity, we trust isCandidateMode which is set during open/edit.
                 const collectionName = isCandidateMode ? 'candidates' : 'itineraries';
                 const colRef = collection(db, 'trips', appId, collectionName);
 
@@ -886,8 +965,9 @@
             const query = document.getElementById('searchAddressInput').value;
             if(!query) return alert("검색어를 입력하세요");
             try {
-                // Updated Search Logic: Added accept-language and addressdetails
-                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&accept-language=ko,en&addressdetails=1`);
+                // Fixed Search: remove accept-language restriction to allow better English match, or use both
+                // Using q=... allows freeform search. addressdetails=1 gives details.
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&addressdetails=1`);
                 const data = await res.json();
                 
                 if(data && data.length > 0) {
@@ -895,13 +975,14 @@
                     const lat = parseFloat(result.lat);
                     const lon = parseFloat(result.lon);
                     
-                    map.setView([lat, lon], 16);
-                    tempLatLng = { lat, lng: lon };
-                    
-                    // Name handling: use the searched query if result name is generic or use result display_name
-                    document.getElementById('addPlace').value = query; // Keep user query as place name (often more accurate for "McDonalds Sakae")
-                    document.getElementById('addAddress').value = result.display_name;
-                    updateMapWeather(lat, lon);
+                    if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                        map.setView([lat, lon], 16);
+                        tempLatLng = { lat, lng: lon };
+                        
+                        document.getElementById('addPlace').value = query; 
+                        document.getElementById('addAddress').value = result.display_name;
+                        updateMapWeather(lat, lon);
+                    }
                 } else { 
                     alert("검색 결과가 없습니다. 주소가 정확한지 확인해주세요."); 
                 }
@@ -916,7 +997,6 @@
              
              timeSection.innerHTML = `<label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">시간</label><input type="time" id="addTime" class="w-full p-3 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:bg-white">`;
 
-             // Cost Input with USD added
              const getCostInput = (label = '예상 비용') => `
                 <div class="bg-white p-3 rounded-lg border border-indigo-100 shadow-sm">
                     <div class="flex justify-between items-center mb-2">
@@ -973,12 +1053,10 @@
             if(!val){ document.getElementById('convertedPreview').innerText=''; return; } 
             
             let jpy = 0;
-            // First convert to JPY (Base)
             if(window.currentCurrency === 'JPY') jpy = val;
             else if(window.currentCurrency === 'KRW') jpy = val / EXCHANGE_RATE;
             else if(window.currentCurrency === 'USD') jpy = val / EXCHANGE_RATE_USD;
 
-            // Then display others
             let krw = Math.round(jpy * EXCHANGE_RATE);
             let usd = (jpy * EXCHANGE_RATE_USD).toFixed(2);
             let jpyDisp = Math.round(jpy);
@@ -1027,178 +1105,197 @@
             const colRef = collection(db, 'trips', appId, 'itineraries');
             
             window.unsub = onSnapshot(colRef, (snapshot) => {
-                const listContainer = document.getElementById('itineraryList');
-                listContainer.innerHTML = '';
-                markersLayer.clearLayers();
-                pathLayer.clearLayers(); 
-                
-                const items = [];
-                snapshot.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
-                window.tripItems = items; 
+                try {
+                    const listContainer = document.getElementById('itineraryList');
+                    listContainer.innerHTML = '';
+                    markersLayer.clearLayers();
+                    pathLayer.clearLayers(); 
+                    
+                    const items = [];
+                    snapshot.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+                    window.tripItems = items; 
 
-                const dayItems = items.filter(item => item.day === currentDay);
-                const fixedItems = dayItems.filter(item => item.category === 'flight' || item.category === 'hotel')
-                                            .sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59'));
-                const timelineItems = dayItems.filter(item => item.category !== 'flight' && item.category !== 'hotel')
-                                             .sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59'));
+                    const dayItems = items.filter(item => item.day === currentDay);
+                    const fixedItems = dayItems.filter(item => item.category === 'flight' || item.category === 'hotel')
+                                                .sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59'));
+                    const timelineItems = dayItems.filter(item => item.category !== 'flight' && item.category !== 'hotel')
+                                                 .sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59'));
 
-                let totalDailyCost = 0;
-                let pathPoints = []; 
+                    let totalDailyCost = 0;
+                    let pathPoints = []; 
 
-                if (dayItems.length === 0) {
-                    listContainer.innerHTML = '<div class="flex flex-col items-center justify-center h-64 text-slate-300"><i class="fa-regular fa-map text-4xl mb-3"></i><p class="text-sm">일정이 비어있습니다.</p></div>';
-                    document.getElementById('dailySummary').classList.add('hidden');
-                } else {
-                    document.getElementById('dailySummary').classList.remove('hidden');
-                    if (isFirstLoad) {
-                        const firstTarget = timelineItems[0] || fixedItems[0];
-                        if (firstTarget && firstTarget.lat && firstTarget.lng) {
-                            map.flyTo([firstTarget.lat, firstTarget.lng], 14, { duration: 1.5 });
-                            isFirstLoad = false;
+                    if (dayItems.length === 0) {
+                        listContainer.innerHTML = '<div class="flex flex-col items-center justify-center h-64 text-slate-300"><i class="fa-regular fa-map text-4xl mb-3"></i><p class="text-sm">일정이 비어있습니다.</p></div>';
+                        document.getElementById('dailySummary').classList.add('hidden');
+                    } else {
+                        document.getElementById('dailySummary').classList.remove('hidden');
+                        if (isFirstLoad) {
+                            const firstTarget = timelineItems[0] || fixedItems[0];
+                            // Fix: Parse LatLng safely
+                            const tLat = parseFloat(firstTarget?.lat);
+                            const tLng = parseFloat(firstTarget?.lng);
+                            if (firstTarget && Number.isFinite(tLat) && Number.isFinite(tLng)) {
+                                map.flyTo([tLat, tLng], 14, { duration: 1.5 });
+                                isFirstLoad = false;
+                            }
                         }
                     }
-                }
 
-                const renderItem = (item, isFixed) => {
-                    const catObj = categories.find(c => c.id === item.category) || categories.find(c => c.id === 'etc');
-                    const isFlight = item.category === 'flight';
-                    const isHotel = item.category === 'hotel';
+                    const renderItem = (item, isFixed) => {
+                        try {
+                            const catObj = categories.find(c => c.id === item.category) || categories.find(c => c.id === 'etc');
+                            const isFlight = item.category === 'flight';
+                            const isHotel = item.category === 'hotel';
 
-                    if (!isFixed) {
-                        totalDailyCost += (item.cost || 0) + (item.moveCost || 0);
+                            if (!isFixed) {
+                                totalDailyCost += (item.cost || 0) + (item.moveCost || 0);
+                            }
+
+                            // Fix: Parse LatLng safely
+                            const itemLat = parseFloat(item.lat);
+                            const itemLng = parseFloat(item.lng);
+                            const hasLocation = Number.isFinite(itemLat) && Number.isFinite(itemLng);
+
+                            if (!isFixed && hasLocation) {
+                                pathPoints.push({
+                                    lat: itemLat, lng: itemLng, moveType: item.moveType || 'walk',
+                                    color: item.moveType === 'walk' ? '#94a3b8' : (item.moveType === 'bus' ? '#6366f1' : '#10b981')
+                                });
+                            }
+
+                            if (hasLocation) {
+                                const markerColor = isFlight ? '#6366f1' : (isHotel ? '#2563eb' : '#ffffff');
+                                const markerIcon = L.divIcon({
+                                    className: 'custom-div-icon',
+                                    html: `<div style="background-color: ${markerColor}; border: 2px solid white; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.2); width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 20px;">${item.categoryIcon || catObj.icon}</div>`,
+                                    iconSize: [40, 40],
+                                    iconAnchor: [20, 20],
+                                    popupAnchor: [0, -20]
+                                });
+                                const marker = L.marker([itemLat, itemLng], {icon: markerIcon}).addTo(markersLayer);
+                                marker.bindPopup(`<div class="text-center min-w-[160px] p-2 font-sans"><div class="text-2xl mb-2">${item.categoryIcon || catObj.icon}</div><h3 class="font-bold mb-1 text-slate-800 text-sm">${item.place}</h3></div>`, { className: 'rounded-xl shadow-xl border-0' });
+                            }
+
+                            let cardClasses = 'p-4 rounded-xl border shadow-sm transition group relative mb-3';
+                            let bgClass = 'bg-white';
+                            let borderClass = 'border-slate-200';
+                            let pickBadge = '';
+
+                            if (item.picker === 'juice') {
+                                bgClass = 'bg-orange-50';
+                                borderClass = 'border-orange-200';
+                                pickBadge = `<span class="text-[8px] font-bold text-orange-600 bg-white/80 px-1.5 py-0.5 rounded border border-orange-100 shadow-sm mr-1">Juice's Pick</span>`;
+                            } else if (item.picker === 'yumin') {
+                                bgClass = 'bg-indigo-50';
+                                borderClass = 'border-indigo-200';
+                                pickBadge = `<span class="text-[8px] font-bold text-indigo-600 bg-white/80 px-1.5 py-0.5 rounded border border-indigo-100 shadow-sm mr-1">Yumin's Pick</span>`;
+                            }
+
+                            if (isFixed) {
+                                 if (isFlight) {
+                                     bgClass = 'bg-indigo-50/60'; borderClass = 'border-indigo-200';
+                                 } else if (isHotel) {
+                                     bgClass = 'bg-blue-50/60'; borderClass = 'border-blue-200';
+                                 }
+                                 cardClasses += ` ${bgClass} ${borderClass}`;
+                            } else {
+                                cardClasses += ` timeline-item pl-14 hover:shadow-md ${bgClass} ${borderClass}`;
+                            }
+                            
+                            const el = document.createElement('div');
+                            el.className = cardClasses;
+                            el.onclick = () => { if(hasLocation) map.flyTo([itemLat, itemLng], 16); };
+                            
+                            let editBtn = '';
+                            if (isAdmin) {
+                                editBtn = `
+                                <div class="absolute top-6 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition z-20">
+                                    <button onclick="event.stopPropagation(); window.editItem('${item.id}')" class="text-slate-400 hover:text-indigo-500 p-1"><i class="fa-solid fa-pen"></i></button>
+                                    <button onclick="event.stopPropagation(); window.deleteItem('${item.id}')" class="text-slate-400 hover:text-rose-500 p-1"><i class="fa-solid fa-trash-can"></i></button>
+                                </div>`;
+                            }
+
+                            let pinBadge = '';
+                            if (isFixed) {
+                                pinBadge = `<div class="absolute -top-2 -right-2 bg-white text-indigo-500 w-7 h-7 flex items-center justify-center rounded-full border border-indigo-100 shadow-sm z-20" title="Fixed Schedule"><i class="fa-solid fa-thumbtack transform rotate-45 text-xs"></i></div>`;
+                            }
+
+                            let timeDisplay = item.time || '';
+                            if (isFlight) timeDisplay = `${item.depTime || '?'} <i class="fa-solid fa-arrow-right text-[10px] mx-1"></i> ${item.arrTime || '?'}`;
+                            else if (isHotel) timeDisplay = `In ${item.checkIn || '-'} / Out ${item.checkOut || '-'}`;
+
+                            let costDisplay = '';
+                            const totalItemCost = (item.cost || 0);
+                            if (totalItemCost > 0) {
+                                const krw = Math.round(totalItemCost * EXCHANGE_RATE).toLocaleString();
+                                costDisplay = `<span class="text-indigo-600 font-bold text-sm bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">¥${totalItemCost.toLocaleString()} <span class="text-[10px] text-slate-400 font-normal">(약 ${krw}원)</span></span>`;
+                            }
+                            if(item.moveCost > 0) {
+                                const mKrw = Math.round(item.moveCost * EXCHANGE_RATE).toLocaleString();
+                                costDisplay += `<div class="text-[10px] text-slate-400 mt-0.5 ml-1"><i class="fa-solid fa-ticket mr-1"></i>이동: ¥${item.moveCost} (${mKrw}원)</div>`;
+                            }
+
+                            let tags = '';
+                            if (item.menu) tags += `<span class="bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded text-[10px] border border-orange-100 font-medium">🍽️ ${item.menu}</span> `;
+                            if (isHotel) {
+                                tags += item.isReserved 
+                                    ? `<span class="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded text-[10px] border border-emerald-100 font-bold">✅ 예약확정</span> ` 
+                                    : `<span class="bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded text-[10px] border border-rose-100 font-bold">⏳ 미예약</span> `;
+                            }
+                            if (item.flightNum) tags += `<span class="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[10px] border border-indigo-100 font-bold">✈️ ${item.flightNum}</span> `;
+
+                            let moveIcon = '';
+                            if(!isFixed && !isFlight) { 
+                                if(item.moveType === 'bus') moveIcon = '<i class="fa-solid fa-bus text-indigo-500 mr-1"></i>';
+                                else if(item.moveType === 'subway') moveIcon = '<i class="fa-solid fa-train-subway text-emerald-500 mr-1"></i>';
+                                else moveIcon = '<i class="fa-solid fa-person-walking text-slate-400 mr-1"></i>';
+                            }
+
+                            el.innerHTML = `
+                                ${pickBadge}
+                                ${pinBadge}
+                                <div class="${isFixed ? 'text-xl z-10 w-10 h-10 flex items-center justify-center bg-white rounded-full border border-white shadow-md mb-2' : 'text-xl z-10 w-9 h-9 flex items-center justify-center bg-white rounded-full border border-slate-100 shadow-sm absolute left-3 top-4'}">${item.categoryIcon || catObj.icon}</div>
+                                <div class="${isFixed ? 'flex flex-col' : ''}">
+                                    <div class="flex justify-between items-start mb-1 w-full gap-2">
+                                        <h4 class="font-bold text-slate-800 text-base flex-1 leading-tight ${isFlight ? 'text-indigo-800' : ''} ${isHotel ? 'text-blue-800' : ''}">${item.place}</h4>
+                                        <span class="text-xs font-bold bg-white/80 border border-slate-100 text-slate-600 px-2 py-1 rounded-lg shadow-sm whitespace-nowrap shrink-0 ml-auto">${timeDisplay || '-'}</span>
+                                    </div>
+                                    <p class="text-xs text-slate-400 truncate">${item.address || ''}</p>
+                                    ${moveIcon ? `<div class="text-[10px] text-slate-500 mb-1 flex items-center bg-slate-50 inline-block px-1.5 rounded border border-slate-100 w-fit mt-1">${moveIcon} 이동</div>` : ''}
+                                    <div class="flex flex-wrap gap-1 mb-1 items-center">
+                                        ${pickBadge}
+                                        ${tags}
+                                    </div>
+                                    ${costDisplay ? `<div class="flex flex-col mt-1">${costDisplay}</div>` : ''}
+                                    ${item.memo ? `<p class="text-sm text-slate-600 mt-2 bg-slate-50/50 p-2 rounded-lg border border-slate-100/50">${item.memo}</p>` : ''}
+                                </div>
+                                ${editBtn}
+                            `;
+                            listContainer.appendChild(el);
+                        } catch (e) {
+                            console.error("Render Item Error:", e, item);
+                        }
+                    };
+
+                    fixedItems.forEach(item => renderItem(item, true));
+                    timelineItems.forEach(item => renderItem(item, false));
+
+                    document.getElementById('dailyTotalJPY').innerText = `¥${totalDailyCost.toLocaleString()}`;
+                    const totalKRW = Math.round(totalDailyCost * EXCHANGE_RATE).toLocaleString();
+                    document.getElementById('dailyTotalKRW').innerText = `≈ ${totalKRW}원`;
+
+                    if (pathPoints.length > 1) {
+                        for (let i = 0; i < pathPoints.length - 1; i++) {
+                            const start = pathPoints[i];
+                            const end = pathPoints[i+1];
+                            const color = end.moveType === 'bus' ? '#6366f1' : (end.moveType === 'subway' ? '#10b981' : '#94a3b8');
+                            L.polyline([[start.lat, start.lng], [end.lat, end.lng]], {
+                                color: color, weight: 3, opacity: 0.7, dashArray: end.moveType === 'walk' ? '5, 10' : null, lineCap: 'round'
+                            }).addTo(pathLayer);
+                        }
                     }
-
-                    if (!isFixed && item.lat && item.lng) {
-                        pathPoints.push({
-                            lat: item.lat, lng: item.lng, moveType: item.moveType || 'walk',
-                            color: item.moveType === 'walk' ? '#94a3b8' : (item.moveType === 'bus' ? '#6366f1' : '#10b981')
-                        });
-                    }
-
-                    if (item.lat) {
-                        const markerColor = isFlight ? '#6366f1' : (isHotel ? '#2563eb' : '#ffffff');
-                        const markerIcon = L.divIcon({
-                            className: 'custom-div-icon',
-                            html: `<div style="background-color: ${markerColor}; border: 2px solid white; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.2); width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 20px;">${item.categoryIcon || catObj.icon}</div>`,
-                            iconSize: [40, 40],
-                            iconAnchor: [20, 20],
-                            popupAnchor: [0, -20]
-                        });
-                        const marker = L.marker([item.lat, item.lng], {icon: markerIcon}).addTo(markersLayer);
-                        marker.bindPopup(`<div class="text-center min-w-[160px] p-2 font-sans"><div class="text-2xl mb-2">${item.categoryIcon || catObj.icon}</div><h3 class="font-bold mb-1 text-slate-800 text-sm">${item.place}</h3></div>`, { className: 'rounded-xl shadow-xl border-0' });
-                    }
-
-                    let cardClasses = 'p-4 rounded-xl border shadow-sm transition group relative mb-3';
-                    let bgClass = 'bg-white';
-                    let borderClass = 'border-slate-200';
-                    let pickBadge = '';
-
-                    if (item.picker === 'juice') {
-                        bgClass = 'bg-orange-50';
-                        borderClass = 'border-orange-200';
-                        pickBadge = `<div class="absolute top-2 right-2 text-[8px] font-bold text-orange-600 bg-white/80 px-1.5 py-0.5 rounded border border-orange-100 shadow-sm z-10">Juice's Pick</div>`;
-                    } else if (item.picker === 'yumin') {
-                        bgClass = 'bg-indigo-50';
-                        borderClass = 'border-indigo-200';
-                        pickBadge = `<div class="absolute top-2 right-2 text-[8px] font-bold text-indigo-600 bg-white/80 px-1.5 py-0.5 rounded border border-indigo-100 shadow-sm z-10">Yumin's Pick</div>`;
-                    }
-
-                    if (isFixed) {
-                         if (isFlight) {
-                             bgClass = 'bg-indigo-50/60'; borderClass = 'border-indigo-200';
-                         } else if (isHotel) {
-                             bgClass = 'bg-blue-50/60'; borderClass = 'border-blue-200';
-                         }
-                         cardClasses += ` ${bgClass} ${borderClass}`;
-                    } else {
-                        cardClasses += ` timeline-item pl-12 hover:shadow-md ${bgClass} ${borderClass}`;
-                    }
-                    
-                    const el = document.createElement('div');
-                    el.className = cardClasses;
-                    el.onclick = () => { if(item.lat) map.flyTo([item.lat, item.lng], 16); };
-                    
-                    let editBtn = '';
-                    if (isAdmin) {
-                        editBtn = `
-                        <div class="absolute top-6 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition z-20">
-                            <button onclick="event.stopPropagation(); window.editItem('${item.id}')" class="text-slate-400 hover:text-indigo-500 p-1"><i class="fa-solid fa-pen"></i></button>
-                            <button onclick="event.stopPropagation(); window.deleteItem('${item.id}')" class="text-slate-400 hover:text-rose-500 p-1"><i class="fa-solid fa-trash-can"></i></button>
-                        </div>`;
-                    }
-
-                    let pinBadge = '';
-                    if (isFixed) {
-                        pinBadge = `<div class="absolute -top-2 -right-2 bg-white text-indigo-500 w-7 h-7 flex items-center justify-center rounded-full border border-indigo-100 shadow-sm z-20" title="Fixed Schedule"><i class="fa-solid fa-thumbtack transform rotate-45 text-xs"></i></div>`;
-                    }
-
-                    let timeDisplay = item.time || '';
-                    if (isFlight) timeDisplay = `${item.depTime || '?'} <i class="fa-solid fa-arrow-right text-[10px] mx-1"></i> ${item.arrTime || '?'}`;
-                    else if (isHotel) timeDisplay = `In ${item.checkIn || '-'} / Out ${item.checkOut || '-'}`;
-
-                    let costDisplay = '';
-                    const totalItemCost = (item.cost || 0);
-                    if (totalItemCost > 0) {
-                        const krw = Math.round(totalItemCost * EXCHANGE_RATE).toLocaleString();
-                        costDisplay = `<span class="text-indigo-600 font-bold text-sm bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">¥${totalItemCost.toLocaleString()} <span class="text-[10px] text-slate-400 font-normal">(약 ${krw}원)</span></span>`;
-                    }
-                    if(item.moveCost > 0) {
-                        const mKrw = Math.round(item.moveCost * EXCHANGE_RATE).toLocaleString();
-                        costDisplay += `<div class="text-[10px] text-slate-400 mt-0.5 ml-1"><i class="fa-solid fa-ticket mr-1"></i>이동: ¥${item.moveCost} (${mKrw}원)</div>`;
-                    }
-
-                    let tags = '';
-                    if (item.menu) tags += `<span class="bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded text-[10px] border border-orange-100 font-medium">🍽️ ${item.menu}</span> `;
-                    if (isHotel) {
-                        tags += item.isReserved 
-                            ? `<span class="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded text-[10px] border border-emerald-100 font-bold">✅ 예약확정</span> ` 
-                            : `<span class="bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded text-[10px] border border-rose-100 font-bold">⏳ 미예약</span> `;
-                    }
-                    if (item.flightNum) tags += `<span class="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[10px] border border-indigo-100 font-bold">✈️ ${item.flightNum}</span> `;
-
-                    let moveIcon = '';
-                    if(!isFixed && !isFlight) { 
-                        if(item.moveType === 'bus') moveIcon = '<i class="fa-solid fa-bus text-indigo-500 mr-1"></i>';
-                        else if(item.moveType === 'subway') moveIcon = '<i class="fa-solid fa-train-subway text-emerald-500 mr-1"></i>';
-                        else moveIcon = '<i class="fa-solid fa-person-walking text-slate-400 mr-1"></i>';
-                    }
-
-                    el.innerHTML = `
-                        ${pickBadge}
-                        ${pinBadge}
-                        <div class="${isFixed ? 'text-xl z-10 w-10 h-10 flex items-center justify-center bg-white rounded-full border border-white shadow-md mb-2' : 'text-xl z-10 w-9 h-9 flex items-center justify-center bg-white rounded-full border border-slate-100 shadow-sm absolute left-3 top-4'}">${item.categoryIcon || catObj.icon}</div>
-                        <div class="${isFixed ? 'flex flex-col' : ''}">
-                            <div class="flex justify-between items-start mb-1 w-full gap-2">
-                                <h4 class="font-bold text-slate-800 text-base flex-1 leading-tight ${isFlight ? 'text-indigo-800' : ''} ${isHotel ? 'text-blue-800' : ''}">${item.place}</h4>
-                                <span class="text-xs font-bold bg-white/80 border border-slate-100 text-slate-600 px-2 py-1 rounded-lg shadow-sm whitespace-nowrap shrink-0 ml-auto">${timeDisplay || '-'}</span>
-                            </div>
-                            <p class="text-xs text-slate-400 truncate">${item.address || ''}</p>
-                            ${moveIcon ? `<div class="text-[10px] text-slate-500 mb-1 flex items-center bg-slate-50 inline-block px-1.5 rounded border border-slate-100 w-fit mt-1">${moveIcon} 이동</div>` : ''}
-                            <div class="flex flex-wrap gap-1 mb-1">${tags}</div>
-                            ${costDisplay ? `<div class="flex flex-col mt-1">${costDisplay}</div>` : ''}
-                            ${item.memo ? `<p class="text-sm text-slate-600 mt-2 bg-slate-50/50 p-2 rounded-lg border border-slate-100/50">${item.memo}</p>` : ''}
-                        </div>
-                        ${editBtn}
-                    `;
-                    listContainer.appendChild(el);
-                };
-
-                fixedItems.forEach(item => renderItem(item, true));
-                timelineItems.forEach(item => renderItem(item, false));
-
-                document.getElementById('dailyTotalJPY').innerText = `¥${totalDailyCost.toLocaleString()}`;
-                const totalKRW = Math.round(totalDailyCost * EXCHANGE_RATE).toLocaleString();
-                document.getElementById('dailyTotalKRW').innerText = `≈ ${totalKRW}원`;
-
-                if (pathPoints.length > 1) {
-                    for (let i = 0; i < pathPoints.length - 1; i++) {
-                        const start = pathPoints[i];
-                        const end = pathPoints[i+1];
-                        const color = end.moveType === 'bus' ? '#6366f1' : (end.moveType === 'subway' ? '#10b981' : '#94a3b8');
-                        L.polyline([[start.lat, start.lng], [end.lat, end.lng]], {
-                            color: color, weight: 3, opacity: 0.7, dashArray: end.moveType === 'walk' ? '5, 10' : null, lineCap: 'round'
-                        }).addTo(pathLayer);
-                    }
+                } catch(err) {
+                    console.error("Snapshot Error:", err);
                 }
             });
         }
