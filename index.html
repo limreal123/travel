@@ -21,7 +21,6 @@
                         primary: '#0f172a', /* Slate 900 */
                         secondary: '#334155', /* Slate 700 */
                         accent: '#6366f1', /* Indigo 500 */
-                        gold: '#d4af37', /* Premium Gold vibe */
                     }
                 }
             }
@@ -36,9 +35,8 @@
         
         .map-container { z-index: 1; }
         .sidebar { z-index: 20; box-shadow: 4px 0 24px rgba(0,0,0,0.08); }
-        .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.5); }
         
-        /* Category Radio Styling - Premium */
+        /* Category Radio Styling */
         .category-radio:checked + label {
             background-color: #f1f5f9;
             border-color: #6366f1;
@@ -46,10 +44,15 @@
             box-shadow: 0 2px 4px rgba(99, 102, 241, 0.1);
             font-weight: 700;
         }
-        .category-radio:checked + label i { color: #6366f1; }
+        .transport-radio:checked + label {
+            background-color: #e0e7ff;
+            color: #4338ca;
+            border-color: #6366f1;
+            font-weight: bold;
+        }
 
-        /* Timeline Line */
-        .timeline-line::before {
+        /* Timeline Line (일반 일정만 적용) */
+        .timeline-item::before {
             content: '';
             position: absolute;
             top: 2rem;
@@ -59,14 +62,18 @@
             background: #e2e8f0;
             z-index: 0;
         }
-        .group-last .timeline-line::before { display: none; }
+        .group-last .timeline-item::before { display: none; }
         
-        /* Custom Toggle Switch */
+        /* Toggle Switch */
         .toggle-checkbox:checked { right: 0; border-color: #6366f1; }
         .toggle-checkbox:checked + .toggle-label { background-color: #6366f1; }
         
         .fade-in { animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Weather Widget Animation */
+        .weather-widget { transition: all 0.3s ease; }
+        .weather-widget:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
     </style>
 </head>
 <body class="h-screen w-screen flex overflow-hidden text-slate-800">
@@ -85,7 +92,7 @@
         <!-- Day 탭 -->
         <div class="flex overflow-x-auto px-4 py-3 bg-white border-b border-slate-100 space-x-2 scrollbar-hide shrink-0" id="dayTabs"></div>
 
-        <!-- 빠른 추가 버튼 그룹 (항공권 & 숙소) -->
+        <!-- 빠른 추가 버튼 그룹 -->
         <div id="quickControls" class="px-4 py-3 grid grid-cols-2 gap-3 bg-slate-50 border-b border-slate-100 hidden shrink-0">
             <button onclick="openAddScheduleModal(0,0, 'flight')" class="py-2.5 px-4 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-600 hover:shadow-sm transition flex items-center justify-center gap-2">
                 <i class="fa-solid fa-ticket text-indigo-500"></i> 항공권 등록
@@ -103,9 +110,15 @@
             </div>
         </div>
 
-        <!-- 하단 상태 메시지 -->
-        <div id="statusMessage" class="px-4 py-3 border-t border-slate-200 bg-white text-center shrink-0">
-            <p class="text-xs text-slate-500 font-medium"><i class="fa-solid fa-location-dot mr-1 text-indigo-500"></i>지도 위를 클릭하여 장소를 추가하세요.</p>
+        <!-- 일별 총 비용 요약 -->
+        <div id="dailySummary" class="px-5 py-4 bg-white border-t border-slate-200 shrink-0 shadow-[0_-4px_10px_rgba(0,0,0,0.02)] hidden">
+            <div class="flex justify-between items-end">
+                <span class="text-sm font-bold text-slate-500">Day Total</span>
+                <div class="text-right">
+                    <div class="text-xl font-bold text-slate-800" id="dailyTotalJPY">¥0</div>
+                    <div class="text-xs font-medium text-slate-400" id="dailyTotalKRW">≈ 0원</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -123,6 +136,9 @@
             </div>
             
             <div class="flex items-center gap-2">
+                <button onclick="openWeatherForecastModal()" class="bg-white/90 backdrop-blur hover:bg-white text-slate-700 px-4 py-2.5 rounded-xl shadow-lg border border-slate-200 font-bold text-sm transition flex items-center gap-2">
+                    <i class="fa-solid fa-calendar-days text-sky-500"></i> 여행 날씨
+                </button>
                 <button onclick="openSuggestionModal()" class="bg-white/90 backdrop-blur hover:bg-white text-slate-700 px-4 py-2.5 rounded-xl shadow-lg border border-slate-200 font-bold text-sm transition flex items-center gap-2">
                     <i class="fa-regular fa-lightbulb text-amber-500"></i> 추천
                 </button>
@@ -137,7 +153,47 @@
                 </button>
             </div>
         </div>
+
+        <!-- 실시간 날씨 위젯 (우측 하단) -->
+        <div id="liveWeatherWidget" class="absolute bottom-6 right-4 z-[900] weather-widget bg-white/90 backdrop-blur-md p-4 rounded-2xl shadow-xl border border-white/50 min-w-[160px] flex flex-col items-center cursor-pointer" onclick="openWeatherForecastModal()">
+            <div class="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1"><i class="fa-solid fa-location-dot mr-1"></i>지도 위치 날씨</div>
+            <div class="flex items-center gap-3">
+                <div id="weatherIcon" class="text-3xl text-slate-600"><i class="fa-solid fa-spinner fa-spin text-lg"></i></div>
+                <div class="text-right">
+                    <div id="weatherTemp" class="text-2xl font-bold text-slate-800">--°</div>
+                    <div id="weatherDesc" class="text-xs text-slate-500 font-medium">로딩 중...</div>
+                </div>
+            </div>
+        </div>
+
         <div id="map" class="w-full h-full z-0 bg-slate-100"></div>
+    </div>
+
+    <!-- 날씨 예보 모달 (3/2~3/7) -->
+    <div id="weatherForecastModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[1000] hidden flex items-center justify-center">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-[600px] fade-in border border-slate-100 m-4">
+            <div class="flex justify-between items-center mb-5 border-b border-slate-100 pb-3">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-cloud-sun mr-2 text-sky-500"></i>여행 기간 날씨 예보</h2>
+                    <p class="text-xs text-slate-500 mt-1">Day별 마지막 일정 장소 기준 (3/2 ~ 3/7)</p>
+                </div>
+                <button onclick="closeWeatherForecastModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-times text-xl"></i></button>
+            </div>
+            
+            <div id="weatherInfoBox" class="bg-sky-50 p-3 rounded-xl mb-4 text-xs text-sky-700 font-medium flex items-center gap-2">
+                <i class="fa-solid fa-circle-info"></i>
+                <span id="weatherInfoText">로딩 중...</span>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3" id="weatherCardsContainer">
+                <div class="col-span-3 text-center py-10 text-slate-400">
+                    <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i>
+                    <p>날씨 정보를 불러오는 중입니다...</p>
+                </div>
+            </div>
+            
+            <button onclick="closeWeatherForecastModal()" class="w-full mt-5 bg-slate-800 text-white py-3 rounded-xl font-bold text-sm hover:bg-slate-700 transition">닫기</button>
+        </div>
     </div>
 
     <!-- 관리자 로그인 모달 -->
@@ -182,32 +238,38 @@
 
     <!-- 일정 추가 모달 -->
     <div id="addScheduleModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[1000] hidden flex items-center justify-center">
-        <div class="bg-white rounded-2xl shadow-2xl p-6 w-[420px] max-h-[90vh] overflow-y-auto fade-in m-4 border border-slate-100">
-            <div class="flex justify-between items-center mb-5 border-b border-slate-100 pb-3">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-[440px] max-h-[90vh] overflow-y-auto fade-in m-4 border border-slate-100 relative">
+            <div class="flex justify-between items-center mb-5 border-b border-slate-100 pb-3 sticky top-0 bg-white z-10">
                 <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-pen-to-square mr-2 text-indigo-500"></i>새 일정 추가</h2>
                 <button onclick="closeAddScheduleModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-times text-xl"></i></button>
             </div>
             
             <div class="space-y-5">
-                <!-- 장소명 -->
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">장소명</label>
-                    <input type="text" id="addPlace" class="w-full p-3 border border-slate-200 rounded-xl text-sm font-medium focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none transition bg-slate-50 focus:bg-white" placeholder="예: 나고야 성">
-                </div>
-                
-                <!-- 시간 -->
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">방문 시간</label>
-                    <input type="time" id="addTime" class="w-full p-3 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:bg-white">
-                </div>
-
-                <!-- 주소 (수정 가능) -->
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">주소</label>
+                <!-- 장소 검색 및 주소 -->
+                <div class="space-y-3">
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide">장소 검색</label>
+                    <div class="flex gap-2">
+                        <div class="relative flex-1">
+                            <input type="text" id="searchAddressInput" class="w-full p-3 pl-9 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none transition" placeholder="장소명 또는 주소 검색" onkeyup="if(window.event.keyCode==13){searchAddress()}">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3.5 text-slate-400"></i>
+                        </div>
+                        <button onclick="searchAddress()" class="px-4 py-2 bg-slate-800 text-white rounded-xl text-sm font-bold hover:bg-slate-700 transition">검색</button>
+                    </div>
+                    
+                    <div>
+                        <input type="text" id="addPlace" class="w-full p-3 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:border-indigo-500 outline-none transition bg-white" placeholder="장소명 (표시용)">
+                    </div>
+                    
                     <div class="relative">
-                        <input type="text" id="addAddress" class="w-full p-3 pl-9 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-600 focus:bg-white focus:border-indigo-500 focus:outline-none transition" placeholder="주소를 입력하세요">
+                        <input type="text" id="addAddress" class="w-full p-3 pl-9 border border-slate-200 rounded-xl text-xs bg-slate-50 text-slate-500 focus:bg-white focus:border-indigo-500 outline-none transition" placeholder="상세 주소 (자동 입력)">
                         <i class="fa-solid fa-map-pin absolute left-3.5 top-3.5 text-slate-400"></i>
                     </div>
+                </div>
+
+                <!-- 시간 (카테고리에 따라 변경됨) -->
+                <div id="timeSection">
+                    <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">시간</label>
+                    <input type="time" id="addTime" class="w-full p-3 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:bg-white">
                 </div>
 
                 <!-- 카테고리 -->
@@ -218,7 +280,32 @@
                     </div>
                 </div>
 
-                <!-- 동적 필드 영역 -->
+                <!-- 이동 수단 (장소 간 이동) -->
+                <div id="transportSection" class="hidden">
+                     <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">이곳까지 이동 수단</label>
+                     <div class="bg-indigo-50/50 p-3 rounded-xl border border-indigo-100">
+                        <div class="grid grid-cols-3 gap-2 mb-3">
+                            <div>
+                                <input type="radio" name="moveType" id="move_walk" value="walk" class="hidden transport-radio" checked onchange="toggleTransportCost(false)">
+                                <label for="move_walk" class="flex items-center justify-center py-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-600 cursor-pointer hover:bg-slate-50 transition"><i class="fa-solid fa-person-walking mr-1"></i>도보</label>
+                            </div>
+                            <div>
+                                <input type="radio" name="moveType" id="move_bus" value="bus" class="hidden transport-radio" onchange="toggleTransportCost(true)">
+                                <label for="move_bus" class="flex items-center justify-center py-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-600 cursor-pointer hover:bg-slate-50 transition"><i class="fa-solid fa-bus mr-1"></i>버스</label>
+                            </div>
+                            <div>
+                                <input type="radio" name="moveType" id="move_subway" value="subway" class="hidden transport-radio" onchange="toggleTransportCost(true)">
+                                <label for="move_subway" class="flex items-center justify-center py-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-600 cursor-pointer hover:bg-slate-50 transition"><i class="fa-solid fa-train-subway mr-1"></i>지하철</label>
+                            </div>
+                        </div>
+                        <div id="moveCostField" class="hidden">
+                            <label class="text-[10px] font-bold text-slate-500 mb-1 block">이동 교통비 (JPY)</label>
+                            <input type="number" id="addMoveCost" class="w-full p-2 border border-slate-200 rounded-lg text-sm text-right bg-white" placeholder="0">
+                        </div>
+                     </div>
+                </div>
+
+                <!-- 동적 필드 영역 (비용 등) -->
                 <div id="dynamicFields" class="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 hidden">
                     <!-- JS Injected -->
                 </div>
@@ -256,21 +343,20 @@
         const db = getFirestore(app);
         const appId = firebaseConfig.projectId;
 
-        let map, markersLayer;
+        let map, markersLayer, pathLayer;
         let currentDay = 1;
         let isAdmin = false;
         const totalDays = 6;
         let isFirstLoad = true;
         let tempLatLng = null;
-
-        // 실시간 환율 (기본값 9.1)
         let EXCHANGE_RATE = 9.1;
+        
+        // 전역 데이터 저장소
+        window.tripItems = [];
 
-        // 카테고리 정의 (대중교통 추가)
         const categories = [
             { id: 'flight', label: '항공', icon: '✈️', color: 'text-indigo-600' },
             { id: 'hotel', label: '숙소', icon: '🏨', color: 'text-blue-600' },
-            { id: 'transport', label: '교통', icon: '🚆', color: 'text-emerald-600' },
             { id: 'food', label: '맛집', icon: '🍴', color: 'text-orange-500' },
             { id: 'cafe', label: '카페', icon: '☕', color: 'text-amber-700' },
             { id: 'attraction', label: '명소', icon: '🎡', color: 'text-purple-600' },
@@ -284,7 +370,8 @@
             initMap();
             renderDayTabs();
             renderCategoryGrid();
-            fetchExchangeRate(); // 환율 가져오기
+            fetchExchangeRate();
+            updateMapWeather(35.1709, 136.8815); // 초기 날씨 (나고야)
             
             try {
                 await signInAnonymously(auth);
@@ -300,21 +387,143 @@
             setupEventListeners();
         };
 
-        // --- 환율 API ---
+        // --- 날씨 예보 기능 (업데이트) ---
+        window.openWeatherForecastModal = async () => {
+            document.getElementById('weatherForecastModal').classList.remove('hidden');
+            const container = document.getElementById('weatherCardsContainer');
+            const infoText = document.getElementById('weatherInfoText');
+            container.innerHTML = `<div class="col-span-3 text-center py-10 text-slate-400"><i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i><p>각 일정의 위치 날씨를 조회중...</p></div>`;
+
+            // 올해 3월 2일 ~ 7일 계산 (현재 날짜 기준 다가오는 3월)
+            const today = new Date();
+            let year = today.getFullYear();
+            // 만약 현재가 3월 이후라면 내년 3월로 설정 (보통 다가오는 여행을 의미하므로)
+            if (today.getMonth() > 2) year += 1; 
+
+            // 기본 평년 데이터 (Fallback)
+            const fallbackData = [
+                { min: 5, max: 13, code: 0 },
+                { min: 6, max: 12, code: 2 },
+                { min: 4, max: 14, code: 1 },
+                { min: 7, max: 11, code: 61 },
+                { min: 3, max: 13, code: 0 },
+                { min: 4, max: 15, code: 0 }
+            ];
+
+            let html = '';
+            let isRealData = false;
+
+            for (let i = 0; i < 6; i++) {
+                const targetDay = i + 1;
+                const month = 3;
+                const day = 2 + i;
+                const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                
+                // 해당 Day의 마지막 일정 좌표 찾기
+                const dayItems = window.tripItems.filter(item => item.day === targetDay)
+                                                .sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59'));
+                
+                let lat = 35.1815, lng = 136.9066; // 기본: 나고야
+                let locName = "나고야";
+
+                if (dayItems.length > 0) {
+                    const lastItem = dayItems[dayItems.length - 1];
+                    if (lastItem.lat && lastItem.lng) {
+                        lat = lastItem.lat;
+                        lng = lastItem.lng;
+                        locName = lastItem.place;
+                    }
+                }
+
+                // 날씨 API 호출 시도
+                let weatherData = null;
+                try {
+                    // Open-Meteo는 Forecast가 7~16일 정도만 나옴.
+                    // 해당 날짜가 범위 내에 있으면 실제 데이터, 아니면 catch로 이동
+                    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=weathercode,temperature_2m_max,temperature_2m_min&start_date=${dateStr}&end_date=${dateStr}&timezone=Asia%2FTokyo`;
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    
+                    if (data.daily && data.daily.time && data.daily.time.length > 0) {
+                        weatherData = {
+                            min: data.daily.temperature_2m_min[0],
+                            max: data.daily.temperature_2m_max[0],
+                            code: data.daily.weathercode[0]
+                        };
+                        isRealData = true;
+                    }
+                } catch (e) {
+                    // console.log("Forecast not available yet, using fallback");
+                }
+
+                // 데이터가 없으면 평년 데이터 사용
+                const displayData = weatherData || fallbackData[i];
+                const wInfo = getWeatherIcon(displayData.code);
+                const isEst = !weatherData; // Estimated
+
+                html += `
+                    <div class="bg-white border ${isEst ? 'border-slate-200' : 'border-indigo-300 ring-1 ring-indigo-100'} p-3 rounded-xl text-center shadow-sm relative group">
+                        <div class="text-[10px] bg-slate-100 rounded-full px-2 py-0.5 inline-block text-slate-500 mb-1 font-bold">
+                            Day ${targetDay} (${month}/${day})
+                        </div>
+                        <div class="text-xs text-slate-400 truncate px-1 mb-1" title="${locName}"><i class="fa-solid fa-map-pin mr-1"></i>${locName}</div>
+                        <div class="text-3xl my-2 flex justify-center items-center h-10">${wInfo.icon}</div>
+                        <div class="font-bold text-slate-700 text-sm">${wInfo.desc}</div>
+                        <div class="text-xs text-slate-500 font-medium mt-1">${displayData.min}° / ${displayData.max}°</div>
+                        ${isEst ? '<div class="absolute top-2 right-2 text-[8px] text-slate-300 bg-slate-50 px-1 rounded border border-slate-100">평년</div>' : '<div class="absolute top-2 right-2 text-[8px] text-indigo-500 bg-indigo-50 px-1 rounded border border-indigo-100 font-bold">실시간</div>'}
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+            infoText.innerHTML = isRealData 
+                ? `기상청 예보 데이터를 기반으로 업데이트되었습니다. (${year}년)` 
+                : `${year}년 예보 데이터가 아직 없습니다. 평년 기후 데이터를 표시합니다.`;
+        };
+
+        window.closeWeatherForecastModal = () => document.getElementById('weatherForecastModal').classList.add('hidden');
+
+        // --- 실시간 지도 날씨 업데이트 ---
+        async function updateMapWeather(lat, lng) {
+            try {
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`;
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                if(data && data.current_weather) {
+                    const temp = data.current_weather.temperature;
+                    const code = data.current_weather.weathercode;
+                    const { icon, desc } = getWeatherIcon(code);
+                    
+                    document.getElementById('weatherTemp').innerText = `${temp}°C`;
+                    document.getElementById('weatherIcon').innerHTML = icon;
+                    document.getElementById('weatherDesc').innerText = desc;
+                }
+            } catch(e) {
+                // Ignore silent errors
+            }
+        }
+
+        function getWeatherIcon(code) {
+            if (code === 0) return { icon: '<i class="fa-solid fa-sun text-orange-400"></i>', desc: '맑음' };
+            if (code >= 1 && code <= 3) return { icon: '<i class="fa-solid fa-cloud-sun text-orange-300"></i>', desc: '구름 조금' };
+            if (code >= 45 && code <= 48) return { icon: '<i class="fa-solid fa-smog text-slate-400"></i>', desc: '안개' };
+            if (code >= 51 && code <= 67) return { icon: '<i class="fa-solid fa-cloud-rain text-sky-400"></i>', desc: '비' };
+            if (code >= 71 && code <= 77) return { icon: '<i class="fa-regular fa-snowflake text-sky-200"></i>', desc: '눈' };
+            if (code >= 80 && code <= 82) return { icon: '<i class="fa-solid fa-cloud-showers-heavy text-blue-500"></i>', desc: '소나기' };
+            if (code >= 95) return { icon: '<i class="fa-solid fa-bolt text-yellow-400"></i>', desc: '뇌우' };
+            return { icon: '<i class="fa-solid fa-cloud text-slate-400"></i>', desc: '흐림' };
+        }
+
         async function fetchExchangeRate() {
             try {
-                // 무료 공개 API 사용 (KRW 기준 JPY 환율 역산 or JPY 기준)
-                // exchangerate-api.com (Open) - JPY 기준 KRW
                 const res = await fetch('https://api.exchangerate-api.com/v4/latest/JPY');
                 const data = await res.json();
                 if (data && data.rates && data.rates.KRW) {
-                    EXCHANGE_RATE = data.rates.KRW; // 1 JPY = N KRW
+                    EXCHANGE_RATE = data.rates.KRW;
                     document.getElementById('exchangeRateDisplay').innerText = `현재 환율: ¥100 = ₩${(EXCHANGE_RATE * 100).toFixed(0)}`;
-                } else {
-                    throw new Error("Rate not found");
                 }
             } catch (e) {
-                console.warn("환율 API 실패, 기본값 사용", e);
                 document.getElementById('exchangeRateDisplay').innerText = `예상 환율: ¥100 = ₩910 (기본값)`;
             }
         }
@@ -327,10 +536,16 @@
             }).addTo(map);
             L.control.zoom({ position: 'bottomright' }).addTo(map);
             markersLayer = L.layerGroup().addTo(map);
+            pathLayer = L.layerGroup().addTo(map);
 
             map.on('click', function(e) {
                 if(!isAdmin) return;
                 openAddScheduleModal(e.latlng.lat, e.latlng.lng);
+            });
+            
+            map.on('moveend', function() {
+                const center = map.getCenter();
+                updateMapWeather(center.lat, center.lng);
             });
         }
 
@@ -365,17 +580,41 @@
             `).join('');
         }
 
-        // 동적 필드 (환율 계산 포함)
-        window.currentCurrency = 'JPY'; // 'JPY' or 'KRW'
+        window.searchAddress = async () => {
+            const query = document.getElementById('searchAddressInput').value;
+            if(!query) return alert("검색어를 입력하세요");
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
+                const data = await res.json();
+                if(data && data.length > 0) {
+                    const result = data[0];
+                    const lat = parseFloat(result.lat);
+                    const lon = parseFloat(result.lon);
+                    map.setView([lat, lon], 16);
+                    tempLatLng = { lat, lng: lon };
+                    document.getElementById('addPlace').value = result.name || query;
+                    document.getElementById('addAddress').value = result.display_name;
+                    updateMapWeather(lat, lon);
+                } else { alert("검색 결과가 없습니다."); }
+            } catch(e) { console.error(e); alert("검색 중 오류 발생"); }
+        };
 
+        window.currentCurrency = 'JPY'; 
         window.updateDynamicFields = (catId) => {
             const container = document.getElementById('dynamicFields');
+            const timeSection = document.getElementById('timeSection');
+            const transportSection = document.getElementById('transportSection');
+
             container.innerHTML = '';
             container.classList.remove('hidden');
+            transportSection.classList.remove('hidden'); 
+
+            timeSection.innerHTML = `
+                <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">방문 시간</label>
+                <input type="time" id="addTime" class="w-full p-3 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:bg-white">
+            `;
 
             let html = '';
-
-            // 비용 입력 UI (토글 포함)
             const getCostInput = (label = '예상 비용') => `
                 <div class="bg-white p-3 rounded-lg border border-indigo-100 shadow-sm">
                     <div class="flex justify-between items-center mb-2">
@@ -394,20 +633,40 @@
             `;
 
             if (catId === 'flight') {
+                 transportSection.classList.add('hidden');
+                 timeSection.innerHTML = `
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                             <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">출발 시간</label>
+                             <input type="time" id="addDepTime" class="w-full p-3 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:bg-white">
+                        </div>
+                        <div>
+                             <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">도착 시간</label>
+                             <input type="time" id="addArrTime" class="w-full p-3 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:bg-white">
+                        </div>
+                    </div>
+                 `;
                  html += `
-                    <div class="grid grid-cols-2 gap-3 mb-3">
-                        <div>
-                            <label class="block text-[10px] font-bold text-slate-500 mb-1">항공편명</label>
-                            <input type="text" id="addFlightNum" class="w-full p-2 border border-slate-200 rounded-lg text-sm" placeholder="KE123">
-                        </div>
-                        <div>
-                            <label class="block text-[10px] font-bold text-slate-500 mb-1">도착 시간</label>
-                            <input type="time" id="addArrTime" class="w-full p-2 border border-slate-200 rounded-lg text-sm">
-                        </div>
+                    <div class="mb-3">
+                        <label class="block text-[10px] font-bold text-slate-500 mb-1">항공편명</label>
+                        <input type="text" id="addFlightNum" class="w-full p-2 border border-slate-200 rounded-lg text-sm bg-white" placeholder="KE123">
                     </div>
                     ${getCostInput('항공권 비용')}
                 `;
             } else if (catId === 'hotel') {
+                transportSection.classList.remove('hidden');
+                timeSection.innerHTML = `
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                             <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">체크인</label>
+                             <input type="time" id="addCheckIn" class="w-full p-3 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:bg-white">
+                        </div>
+                        <div>
+                             <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">체크아웃</label>
+                             <input type="time" id="addCheckOut" class="w-full p-3 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:bg-white">
+                        </div>
+                    </div>
+                 `;
                 html += `
                     <div class="flex items-center justify-between mb-3 bg-white p-3 rounded-lg border border-indigo-100 shadow-sm">
                         <span class="text-xs font-bold text-slate-600">예약 상태</span>
@@ -417,14 +676,6 @@
                         </div>
                     </div>
                     ${getCostInput('숙박비 (1박)')}
-                `;
-            } else if (catId === 'transport') {
-                 html += `
-                    <div class="mb-2">
-                        <label class="block text-xs font-bold text-slate-600 mb-1">교통수단 (예: 메이테츠 특급)</label>
-                        <input type="text" id="addTransportName" class="w-full p-2 border border-slate-200 rounded text-sm bg-white" placeholder="이동 수단">
-                    </div>
-                    ${getCostInput('운임')}
                 `;
             } else if (catId === 'food' || catId === 'cafe') {
                 html += `
@@ -441,8 +692,18 @@
             } else {
                 container.classList.add('hidden');
             }
-
             container.innerHTML = html;
+        };
+
+        window.toggleTransportCost = (show) => {
+            const field = document.getElementById('moveCostField');
+            if(show) {
+                field.classList.remove('hidden');
+                document.getElementById('addMoveCost').focus();
+            } else {
+                field.classList.add('hidden');
+                document.getElementById('addMoveCost').value = '';
+            }
         };
 
         window.setCurrency = (curr) => {
@@ -450,8 +711,6 @@
             document.getElementById('btn-JPY').className = `px-2 py-0.5 text-[10px] font-bold rounded ${curr==='JPY'?'bg-white shadow text-indigo-600':'text-slate-400'}`;
             document.getElementById('btn-KRW').className = `px-2 py-0.5 text-[10px] font-bold rounded ${curr==='KRW'?'bg-white shadow text-indigo-600':'text-slate-400'}`;
             document.getElementById('currencySymbol').innerText = curr === 'JPY' ? '¥' : '₩';
-            
-            // 재계산
             const val = document.getElementById('addCost').value;
             if(val) calcConversion(val);
         };
@@ -462,35 +721,31 @@
                 return;
             }
             if (window.currentCurrency === 'JPY') {
-                // JPY -> KRW
                 const krw = Math.round(val * EXCHANGE_RATE);
                 document.getElementById('convertedPreview').innerText = `≈ ${krw.toLocaleString()}원`;
             } else {
-                // KRW -> JPY
                 const jpy = Math.round(val / EXCHANGE_RATE);
                 document.getElementById('convertedPreview').innerText = `≈ ${jpy.toLocaleString()}엔`;
             }
         };
 
-        // 모달 열기
         window.openAddScheduleModal = async (lat, lng, preSelectCat = null) => {
             const modal = document.getElementById('addScheduleModal');
-            
-            // 초기화
+            document.getElementById('searchAddressInput').value = '';
             document.getElementById('addPlace').value = preSelectCat === 'flight' ? '나고야 중부국제공항' : '';
-            document.getElementById('addTime').value = '';
             document.getElementById('addMemo').value = '';
             document.getElementById('addAddress').value = '위치 확인 중...';
+            document.getElementById('move_walk').checked = true; 
+            window.toggleTransportCost(false);
             
             let targetCat = preSelectCat || 'etc';
             document.getElementById(`cat_${targetCat}`).checked = true;
             
-            // UI 업데이트
-            window.currentCurrency = 'JPY'; // 기본
+            window.currentCurrency = 'JPY'; 
             window.updateDynamicFields(targetCat);
             
             if (preSelectCat && preSelectCat !== 'etc') {
-                tempLatLng = null; // 버튼으로 추가 시 좌표 없음 (또는 기본값)
+                tempLatLng = null; 
                 document.getElementById('addAddress').value = '-';
             } else {
                 tempLatLng = { lat, lng };
@@ -498,7 +753,7 @@
             }
 
             modal.classList.remove('hidden');
-            setTimeout(() => document.getElementById('addPlace').focus(), 100);
+            setTimeout(() => document.getElementById('searchAddressInput').focus(), 100);
         };
 
         window.closeAddScheduleModal = () => document.getElementById('addScheduleModal').classList.add('hidden');
@@ -509,7 +764,6 @@
                 const data = await response.json();
                 if(data && data.display_name) {
                     const parts = data.display_name.split(',');
-                    // 일본 주소 체계 고려하여 뒤에서부터 가져오거나, 주요 부분만
                     document.getElementById('addAddress').value = parts.slice(0, 3).join(', ');
                 } else {
                     document.getElementById('addAddress').value = "";
@@ -519,36 +773,46 @@
             }
         }
 
-        // --- 일정 저장 ---
         window.submitNewSchedule = async () => {
             if(!isAdmin) return alert("관리자 권한이 필요합니다.");
             
             const place = document.getElementById('addPlace').value;
-            const time = document.getElementById('addTime').value;
             const memo = document.getElementById('addMemo').value;
             const address = document.getElementById('addAddress').value;
             const selectedCatId = document.querySelector('input[name="category"]:checked').value;
             const categoryObj = categories.find(c => c.id === selectedCatId);
 
-            // 동적 필드 처리
+            let time = '', depTime = '', arrTime = '', checkIn = '', checkOut = '';
+            if(selectedCatId === 'flight') {
+                depTime = document.getElementById('addDepTime')?.value || '';
+                arrTime = document.getElementById('addArrTime')?.value || '';
+                time = depTime; 
+            } else if(selectedCatId === 'hotel') {
+                checkIn = document.getElementById('addCheckIn')?.value || '';
+                checkOut = document.getElementById('addCheckOut')?.value || '';
+                time = checkIn; 
+            } else {
+                time = document.getElementById('addTime')?.value || '';
+            }
+
+            let moveType = 'walk';
+            let moveCost = 0;
+            if(selectedCatId !== 'flight') {
+                moveType = document.querySelector('input[name="moveType"]:checked').value;
+                if(moveType !== 'walk') {
+                    moveCost = parseInt(document.getElementById('addMoveCost').value) || 0;
+                }
+            }
+
             const costInput = document.getElementById('addCost');
             let costJPY = 0;
             if (costInput && costInput.value) {
-                if (window.currentCurrency === 'JPY') {
-                    costJPY = parseInt(costInput.value);
-                } else {
-                    costJPY = Math.round(parseInt(costInput.value) / EXCHANGE_RATE); // KRW -> JPY 저장
-                }
+                costJPY = window.currentCurrency === 'JPY' ? parseInt(costInput.value) : Math.round(parseInt(costInput.value) / EXCHANGE_RATE);
             }
 
             const menu = document.getElementById('addMenu')?.value || '';
             const isReserved = document.getElementById('addReserved')?.checked || false;
-            
-            // 항공편 전용
             const flightNum = document.getElementById('addFlightNum')?.value || '';
-            const arrTime = document.getElementById('addArrTime')?.value || '';
-            // 교통편 전용
-            const transportName = document.getElementById('addTransportName')?.value || '';
 
             if(!place) return alert("장소명을 입력하세요.");
 
@@ -559,11 +823,14 @@
                     category: selectedCatId,
                     categoryIcon: categoryObj.icon,
                     cost: costJPY, 
-                    menu, isReserved, flightNum, arrTime, transportName,
+                    moveType, moveCost, 
+                    depTime, arrTime, 
+                    checkIn, checkOut, 
+                    menu, isReserved, flightNum,
                     createdAt: new Date().toISOString()
                 };
 
-                if(tempLatLng && selectedCatId !== 'flight') { // 항공은 좌표 생략 가능
+                if(tempLatLng && selectedCatId !== 'flight') {
                     docData.lat = tempLatLng.lat;
                     docData.lng = tempLatLng.lng;
                 }
@@ -576,7 +843,6 @@
             }
         };
 
-        // --- 리스트 렌더링 ---
         function subscribeToItinerary() {
             if (window.unsub) window.unsub();
             const colRef = collection(db, 'trips', appId, 'itineraries');
@@ -585,98 +851,62 @@
                 const listContainer = document.getElementById('itineraryList');
                 listContainer.innerHTML = '';
                 markersLayer.clearLayers();
+                pathLayer.clearLayers(); 
                 
                 const items = [];
                 snapshot.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
 
-                // 시간순 정렬 (Time이 없으면 맨 뒤로)
-                const filteredItems = items
-                    .filter(item => item.day === currentDay)
-                    .sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59'));
+                // 전역 데이터 업데이트 (날씨 팝업용)
+                window.tripItems = items;
 
-                if (filteredItems.length === 0) {
+                // 1. 현재 날짜 아이템 필터링
+                const dayItems = items.filter(item => item.day === currentDay);
+
+                // 2. 카테고리별 분리 (고정 아이템 vs 타임라인 아이템)
+                const fixedItems = dayItems.filter(item => item.category === 'flight' || item.category === 'hotel')
+                                           .sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59'));
+                
+                const timelineItems = dayItems.filter(item => item.category !== 'flight' && item.category !== 'hotel')
+                                              .sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59'));
+
+                let totalDailyCost = 0;
+                let pathPoints = []; 
+
+                if (dayItems.length === 0) {
                     listContainer.innerHTML = `
                         <div class="flex flex-col items-center justify-center h-64 text-slate-300">
                             <i class="fa-regular fa-map text-4xl mb-3"></i>
                             <p class="text-sm">일정이 비어있습니다.</p>
                         </div>`;
+                    document.getElementById('dailySummary').classList.add('hidden');
                 } else {
-                    if (isFirstLoad && filteredItems[0].lat && filteredItems[0].lng) {
-                        map.flyTo([filteredItems[0].lat, filteredItems[0].lng], 14, { duration: 1.5 });
-                        isFirstLoad = false;
+                    document.getElementById('dailySummary').classList.remove('hidden');
+                    
+                    if (isFirstLoad) {
+                        const firstTarget = timelineItems[0] || fixedItems[0];
+                        if (firstTarget && firstTarget.lat && firstTarget.lng) {
+                            map.flyTo([firstTarget.lat, firstTarget.lng], 14, { duration: 1.5 });
+                            isFirstLoad = false;
+                        }
                     }
                 }
 
-                filteredItems.forEach((item, index) => {
+                const renderItem = (item, isFixed) => {
                     const catObj = categories.find(c => c.id === item.category) || categories.find(c => c.id === 'etc');
                     const isFlight = item.category === 'flight';
                     const isHotel = item.category === 'hotel';
-                    const isTransport = item.category === 'transport';
-                    
-                    // 비용 표시 (KRW 환산)
-                    let costDisplay = '';
-                    if (item.cost > 0) {
-                        const krw = Math.round(item.cost * EXCHANGE_RATE).toLocaleString();
-                        costDisplay = `<span class="text-slate-500 font-medium">💴 ¥${item.cost.toLocaleString()} <span class="text-[10px] text-slate-400">(약 ${krw}원)</span></span>`;
+
+                    totalDailyCost += (item.cost || 0) + (item.moveCost || 0);
+
+                    if (!isFixed && item.lat && item.lng) {
+                        pathPoints.push({
+                            lat: item.lat, 
+                            lng: item.lng, 
+                            moveType: item.moveType || 'walk',
+                            color: item.moveType === 'walk' ? '#94a3b8' : (item.moveType === 'bus' ? '#6366f1' : '#10b981')
+                        });
                     }
 
-                    // 태그 생성
-                    let tags = '';
-                    if (item.menu) tags += `<span class="bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded text-[10px] border border-orange-100 font-medium">🍽️ ${item.menu}</span> `;
-                    if (item.isReserved !== undefined && isHotel) {
-                        tags += item.isReserved 
-                            ? `<span class="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded text-[10px] border border-emerald-100 font-bold">✅ 예약확정</span> ` 
-                            : `<span class="bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded text-[10px] border border-rose-100 font-bold">⏳ 미예약</span> `;
-                    }
-                    if (item.flightNum) tags += `<span class="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[10px] border border-indigo-100 font-bold">✈️ ${item.flightNum}</span> `;
-                    if (item.transportName) tags += `<span class="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded text-[10px] border border-emerald-100 font-bold">🚆 ${item.transportName}</span> `;
-
-                    // 시간 표시 (항공편인 경우 도착시간 포함)
-                    let timeDisplay = item.time || '';
-                    if (isFlight && item.arrTime) timeDisplay += ` ~ ${item.arrTime}`;
-
-                    // 카드 스타일 분기
-                    let cardClasses = 'bg-white p-4 rounded-xl border shadow-sm transition group relative timeline-line pl-12 mb-0';
-                    if (isFlight) cardClasses = 'bg-indigo-50/60 p-5 rounded-2xl border border-indigo-200 shadow-sm transition group relative mb-2'; // 항공권 강조
-                    else if (isHotel) cardClasses = 'bg-blue-50/60 p-5 rounded-2xl border border-blue-200 shadow-sm transition group relative mb-2'; // 숙소 강조
-                    else cardClasses += ' hover:shadow-md border-slate-100';
-
-                    const el = document.createElement('div');
-                    el.className = cardClasses;
-                    el.onclick = () => { if(item.lat) map.flyTo([item.lat, item.lng], 16); };
-                    
-                    // 아이콘 스타일
-                    let iconStyle = `text-xl z-10 w-9 h-9 flex items-center justify-center bg-white rounded-full border border-slate-100 shadow-sm absolute left-3 top-4`;
-                    if(isFlight || isHotel) iconStyle = `text-2xl z-10 w-10 h-10 flex items-center justify-center bg-white rounded-full border border-white shadow-md mb-2`;
-
-                    el.innerHTML = `
-                        ${!isFlight && !isHotel ? `<div class="${iconStyle}">${item.categoryIcon || catObj.icon}</div>` : ''}
-                        
-                        <div class="${isFlight || isHotel ? 'flex flex-col' : ''}">
-                            <div class="flex justify-between items-start mb-1">
-                                <div class="flex items-center gap-2">
-                                    ${isFlight || isHotel ? `<div class="text-xl">${item.categoryIcon}</div>` : ''}
-                                    <h4 class="font-bold text-slate-800 text-base ${isFlight ? 'text-indigo-800' : ''} ${isHotel ? 'text-blue-800' : ''}">${item.place}</h4>
-                                </div>
-                                <span class="text-xs font-bold bg-white/80 border border-slate-100 text-slate-600 px-2 py-1 rounded-lg shadow-sm whitespace-nowrap">${timeDisplay || '-'}</span>
-                            </div>
-                            
-                            ${item.address && !isFlight ? `<p class="text-xs text-slate-400 mb-2 truncate"><i class="fa-solid fa-map-pin mr-1"></i>${item.address}</p>` : ''}
-                            
-                            <div class="flex flex-wrap gap-1 mb-1">${tags}</div>
-                            
-                            ${costDisplay ? `<div class="text-xs mt-1 mb-1">${costDisplay}</div>` : ''}
-                            ${item.memo ? `<p class="text-sm text-slate-600 mt-2 bg-slate-50/50 p-2 rounded-lg border border-slate-100/50">${item.memo}</p>` : ''}
-                        </div>
-
-                        ${isAdmin ? `
-                        <button onclick="event.stopPropagation(); window.deleteItem('${item.id}')" class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition text-slate-300 hover:text-rose-500 p-2">
-                            <i class="fa-solid fa-trash-can"></i>
-                        </button>` : ''}
-                    `;
-                    listContainer.appendChild(el);
-
-                    // 마커 생성
                     if (item.lat) {
                         const markerColor = isFlight ? '#6366f1' : (isHotel ? '#2563eb' : '#ffffff');
                         const markerIcon = L.divIcon({
@@ -686,8 +916,12 @@
                             iconAnchor: [20, 20],
                             popupAnchor: [0, -20]
                         });
-
                         const marker = L.marker([item.lat, item.lng], {icon: markerIcon}).addTo(markersLayer);
+                        
+                        let timeDisplay = item.time || '';
+                        if (isFlight) timeDisplay = `${item.depTime || '?'} <i class="fa-solid fa-arrow-right text-[10px] mx-1"></i> ${item.arrTime || '?'}`;
+                        else if (isHotel) timeDisplay = `In ${item.checkIn || '-'} / Out ${item.checkOut || '-'}`;
+
                         marker.bindPopup(`
                             <div class="text-center min-w-[160px] p-1 font-sans">
                                 <div class="text-2xl mb-2">${item.categoryIcon || catObj.icon}</div>
@@ -696,11 +930,119 @@
                             </div>
                         `, { className: 'rounded-xl shadow-xl border-0' });
                     }
-                });
+
+                    let costDisplay = '';
+                    const totalItemCost = (item.cost || 0);
+                    if (totalItemCost > 0) {
+                        const krw = Math.round(totalItemCost * EXCHANGE_RATE).toLocaleString();
+                        costDisplay = `<span class="text-indigo-600 font-bold text-sm bg-indigo-50 px-2 py-0.5 rounded">¥${totalItemCost.toLocaleString()} <span class="text-[10px] text-slate-400 font-normal">(약 ${krw}원)</span></span>`;
+                    }
+                    if(item.moveCost > 0) {
+                        const mKrw = Math.round(item.moveCost * EXCHANGE_RATE).toLocaleString();
+                        costDisplay += `<div class="text-[10px] text-slate-400 mt-0.5 ml-1"><i class="fa-solid fa-ticket mr-1"></i>이동: ¥${item.moveCost} (${mKrw}원)</div>`;
+                    }
+
+                    let timeDisplay = item.time || '';
+                    if (isFlight) timeDisplay = `${item.depTime || '?'} <i class="fa-solid fa-arrow-right text-[10px] mx-1"></i> ${item.arrTime || '?'}`;
+                    else if (isHotel) timeDisplay = `In ${item.checkIn || '-'} / Out ${item.checkOut || '-'}`;
+
+                    let tags = '';
+                    if (item.menu) tags += `<span class="bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded text-[10px] border border-orange-100 font-medium">🍽️ ${item.menu}</span> `;
+                    if (isHotel) {
+                        tags += item.isReserved 
+                            ? `<span class="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded text-[10px] border border-emerald-100 font-bold">✅ 예약확정</span> ` 
+                            : `<span class="bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded text-[10px] border border-rose-100 font-bold">⏳ 미예약</span> `;
+                    }
+                    if (item.flightNum) tags += `<span class="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[10px] border border-indigo-100 font-bold">✈️ ${item.flightNum}</span> `;
+
+                    let moveIcon = '';
+                    if(!isFixed && !isFlight) { 
+                        if(item.moveType === 'bus') moveIcon = '<i class="fa-solid fa-bus text-indigo-500 mr-1"></i>';
+                        else if(item.moveType === 'subway') moveIcon = '<i class="fa-solid fa-train-subway text-emerald-500 mr-1"></i>';
+                        else moveIcon = '<i class="fa-solid fa-person-walking text-slate-400 mr-1"></i>';
+                    }
+
+                    let cardClasses = 'bg-white p-4 rounded-xl border shadow-sm transition group relative mb-3';
+                    if (isFixed) {
+                         if (isFlight) cardClasses = 'bg-indigo-50/60 p-5 rounded-2xl border border-indigo-200 shadow-sm transition group relative mb-3';
+                         else if (isHotel) cardClasses = 'bg-blue-50/60 p-5 rounded-2xl border border-blue-200 shadow-sm transition group relative mb-3';
+                    } else {
+                        cardClasses += ' timeline-item pl-12 hover:shadow-md border-slate-100';
+                    }
+
+                    const el = document.createElement('div');
+                    el.className = cardClasses;
+                    el.onclick = () => { if(item.lat) map.flyTo([item.lat, item.lng], 16); };
+                    
+                    let iconStyle = `text-xl z-10 w-9 h-9 flex items-center justify-center bg-white rounded-full border border-slate-100 shadow-sm absolute left-3 top-4`;
+                    if(isFixed) iconStyle = `text-2xl z-10 w-10 h-10 flex items-center justify-center bg-white rounded-full border border-white shadow-md mb-2`;
+
+                    el.innerHTML = `
+                        ${!isFixed ? `<div class="${iconStyle}">${item.categoryIcon || catObj.icon}</div>` : ''}
+                        
+                        <div class="${isFixed ? 'flex flex-col' : ''}">
+                            <div class="flex justify-between items-start mb-1">
+                                <div class="flex items-center gap-2">
+                                    ${isFixed ? `<div class="text-xl">${item.categoryIcon}</div>` : ''}
+                                    <h4 class="font-bold text-slate-800 text-base ${isFlight ? 'text-indigo-800' : ''} ${isHotel ? 'text-blue-800' : ''}">${item.place}</h4>
+                                </div>
+                                <span class="text-xs font-bold bg-white/80 border border-slate-100 text-slate-600 px-2 py-1 rounded-lg shadow-sm whitespace-nowrap">${timeDisplay || '-'}</span>
+                            </div>
+                            
+                            ${item.address && !isFlight ? `<p class="text-xs text-slate-400 mb-2 truncate"><i class="fa-solid fa-map-pin mr-1"></i>${item.address}</p>` : ''}
+                            
+                            ${moveIcon ? `<div class="text-[10px] text-slate-500 mb-1 flex items-center bg-slate-50 inline-block px-1.5 rounded border border-slate-100 w-fit">${moveIcon} 이동</div>` : ''}
+
+                            <div class="flex flex-wrap gap-1 mb-1">${tags}</div>
+                            
+                            ${costDisplay ? `<div class="flex flex-col mt-1">${costDisplay}</div>` : ''}
+                            ${item.memo ? `<p class="text-sm text-slate-600 mt-2 bg-slate-50/50 p-2 rounded-lg border border-slate-100/50">${item.memo}</p>` : ''}
+                        </div>
+
+                        ${isAdmin ? `
+                        <button onclick="event.stopPropagation(); window.deleteItem('${item.id}')" class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition text-slate-300 hover:text-rose-500 p-2">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>` : ''}
+                    `;
+                    listContainer.appendChild(el);
+                };
+
+                fixedItems.forEach(item => renderItem(item, true));
+                timelineItems.forEach(item => renderItem(item, false));
+
+                document.getElementById('dailyTotalJPY').innerText = `¥${totalDailyCost.toLocaleString()}`;
+                const totalKRW = Math.round(totalDailyCost * EXCHANGE_RATE).toLocaleString();
+                document.getElementById('dailyTotalKRW').innerText = `≈ ${totalKRW}원`;
+
+                if (pathPoints.length > 1) {
+                    for (let i = 0; i < pathPoints.length - 1; i++) {
+                        const start = pathPoints[i];
+                        const end = pathPoints[i+1];
+                        
+                        const moveType = end.moveType; 
+                        let dashArray = null;
+                        let color = '#94a3b8'; // 도보
+                        
+                        if(moveType === 'walk') {
+                            dashArray = '5, 10'; 
+                        } else if(moveType === 'bus') {
+                            color = '#6366f1'; 
+                        } else if(moveType === 'subway') {
+                            color = '#10b981'; 
+                        }
+
+                        L.polyline([[start.lat, start.lng], [end.lat, end.lng]], {
+                            color: color,
+                            weight: 3,
+                            opacity: 0.7,
+                            dashArray: dashArray,
+                            lineCap: 'round'
+                        }).addTo(pathLayer);
+                    }
+                }
             });
         }
 
-        // --- 공통 기능 ---
         window.deleteItem = async (id) => {
             if(confirm("삭제하시겠습니까?")) await deleteDoc(doc(db, 'trips', appId, 'itineraries', id));
         };
@@ -748,7 +1090,6 @@
             } catch(e) { alert("전송 실패"); }
         };
 
-        // 건의함 로직 (생략된 부분 복원)
         let suggestionUnsub = null;
         window.openAdminSuggestionBox = () => {
             document.getElementById('adminSuggestionBox').classList.remove('hidden');
@@ -792,6 +1133,7 @@
                     window.closeSuggestionModal();
                     window.closeAddScheduleModal();
                     window.closeAdminSuggestionBox();
+                    window.closeWeatherForecastModal();
                 }
             });
         }
