@@ -47,9 +47,15 @@
         .fab-btn:hover { transform: scale(1.1); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
         .fab-btn:active { transform: scale(0.95); }
         /* Leaflet Popup Style Override */
-        .leaflet-popup-content-wrapper { border-radius: 12px; padding: 0; overflow: hidden; }
-        .leaflet-popup-content { margin: 0; }
+        .leaflet-popup-content-wrapper { border-radius: 12px; padding: 0; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1); }
+        .leaflet-popup-content { margin: 0; width: 280px !important; }
         .leaflet-popup-tip { background: white; }
+        /* Rating Slider Customization */
+        input[type=range] { -webkit-appearance: none; background: transparent; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 20px; width: 20px; border-radius: 50%; background: #fbbf24; cursor: pointer; margin-top: -8px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #e2e8f0; border-radius: 2px; }
+        .carousel-btn { background: rgba(0,0,0,0.5); color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px; transition: background 0.2s; }
+        .carousel-btn:hover { background: rgba(0,0,0,0.8); }
     </style>
 </head>
 <body class="w-screen flex overflow-hidden text-slate-800 relative">
@@ -103,7 +109,7 @@
                 <div class="flex justify-between items-end">
                     <div>
                         <span class="text-sm font-bold text-slate-500">Day Total</span>
-                        <p class="text-[10px] text-slate-400">* 항공/숙소 제외</p>
+                        <p class="text-[10px] text-slate-400">* 항공/숙소 비용 제외 (이동비 포함)</p>
                     </div>
                     <div class="text-right">
                         <div class="text-xl font-bold text-slate-800" id="dailyTotalJPY">¥0</div>
@@ -291,6 +297,15 @@
                     </div>
                 </div>
 
+                <!-- 평점 (슬라이더) -->
+                <div>
+                     <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">평점 (0.0 ~ 5.0)</label>
+                     <div class="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                         <input type="range" id="ratingSlider" min="0" max="5" step="0.1" value="0" class="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-amber-400">
+                         <div class="w-12 text-right font-bold text-amber-500 text-lg" id="ratingValueDisplay">0.0</div>
+                     </div>
+                </div>
+
                 <!-- 누구의 Pick? -->
                 <div>
                     <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">누구의 픽?</label>
@@ -324,8 +339,8 @@
 
                 <!-- 이동 수단 -->
                 <div id="transportSection" class="hidden">
-                     <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">이곳까지 이동 수단</label>
-                     <div class="bg-indigo-50/50 p-3 rounded-xl border border-indigo-100">
+                      <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">이곳까지 이동 수단</label>
+                      <div class="bg-indigo-50/50 p-3 rounded-xl border border-indigo-100">
                         <div class="grid grid-cols-3 gap-2 mb-3">
                             <div>
                                 <input type="radio" name="moveType" id="move_walk" value="walk" class="hidden transport-radio" checked onchange="toggleTransportCost(false)">
@@ -344,11 +359,21 @@
                             <label class="text-[10px] font-bold text-slate-500 mb-1 block">이동 교통비 (JPY)</label>
                             <input type="number" id="addMoveCost" class="w-full p-2 border border-slate-200 rounded-lg text-sm text-right bg-white" placeholder="0">
                         </div>
-                     </div>
+                      </div>
                 </div>
 
                 <!-- 동적 필드 (비용 등) -->
                 <div id="dynamicFields" class="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 hidden"></div>
+
+                <!-- 이미지 추가 (최대 3개) -->
+                <div>
+                     <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">이미지 (URL)</label>
+                     <div class="space-y-2">
+                         <input type="text" id="imgUrl1" class="w-full p-3 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none transition" placeholder="이미지 URL 1">
+                         <input type="text" id="imgUrl2" class="w-full p-3 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none transition" placeholder="이미지 URL 2">
+                         <input type="text" id="imgUrl3" class="w-full p-3 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none transition" placeholder="이미지 URL 3">
+                     </div>
+                </div>
 
                 <!-- 메모 -->
                 <div>
@@ -394,6 +419,7 @@
         
         window.tripItems = [];
         window.candidateItems = [];
+        window.popupImageStates = {}; // 팝업 이미지 상태 관리 { itemId: 0 }
         
         let editingId = null; 
         let isCandidateMode = false; 
@@ -414,6 +440,7 @@
             initMap();
             renderDayTabs();
             renderCategoryGrid();
+            setupRatingUI();
             fetchExchangeRate();
             updateMapWeather(35.1709, 136.8815); 
             
@@ -463,7 +490,7 @@
             openAddScheduleModal(null, null, 'etc', isCandidateTab);
         };
 
-        // --- 여행 날씨 모달 (수정됨: 2026년 3월 2일 기준) ---
+        // --- 여행 날씨 모달 ---
         window.openWeatherForecastModal = async () => {
             const modal = document.getElementById('weatherForecastModal');
             modal.classList.remove('hidden');
@@ -475,13 +502,13 @@
                 if(!window.tripItems) { throw new Error("데이터 없음"); }
 
                 let cardsHtml = '';
-                const baseDate = new Date('2026-03-02'); // 2026년 3월 2일 월요일
+                const baseDate = new Date('2026-03-02'); 
 
                 for (let i = 1; i <= totalDays; i++) {
                     const dayItems = window.tripItems.filter(item => item.day === i);
                     let targetItem = dayItems.find(item => item.category === 'hotel') || dayItems[dayItems.length - 1];
                     
-                    let lat = 35.1709; // Default Nagoya
+                    let lat = 35.1709; 
                     let lng = 136.8815;
                     let locationName = "나고야";
 
@@ -495,21 +522,17 @@
                         }
                     }
 
-                    // 날짜 계산
                     const currentDate = new Date(baseDate);
                     currentDate.setDate(baseDate.getDate() + (i - 1));
                     const month = currentDate.getMonth() + 1;
                     const date = currentDate.getDate();
                     const dayName = ['일','월','화','수','목','금','토'][currentDate.getDay()];
                     
-                    // API 호출 (현재 시점 기준 예보를 가져오지만 UI에는 미래 날짜 표시)
-                    // 실제 2026년 데이터는 없으므로 Open-Meteo의 일반 예보를 사용하여 시뮬레이션
                     const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=Asia%2FTokyo`);
                     const data = await res.json();
                     
                     let wCode = 0, maxT = 0, minT = 0;
                     if(data.daily && data.daily.time) {
-                        // 날씨 데이터는 현재 시점의 +i일 데이터를 가져와서 보여줌 (Mocking)
                         const idx = Math.min(i-1, data.daily.time.length - 1);
                         wCode = data.daily.weathercode[idx];
                         maxT = data.daily.temperature_2m_max[idx];
@@ -598,6 +621,18 @@
             document.getElementById('addAddress').value = item.address || '';
             document.getElementById('addMemo').value = item.memo || '';
             
+            // 이미지 값 채우기
+            if(item.images && Array.isArray(item.images)) {
+                document.getElementById('imgUrl1').value = item.images[0] || '';
+                document.getElementById('imgUrl2').value = item.images[1] || '';
+                document.getElementById('imgUrl3').value = item.images[2] || '';
+            }
+
+            // 평점 값 채우기
+            if(item.rating) {
+                setRatingValue(item.rating);
+            }
+
             const pickerRadios = document.querySelectorAll('input[name="picker"]');
             pickerRadios.forEach(r => r.checked = false);
             if(item.picker) {
@@ -644,7 +679,6 @@
                 }
             }
 
-            // Safe parsing for edit mode
             const eLat = parseFloat(item.lat);
             const eLng = parseFloat(item.lng);
             if(Number.isFinite(eLat) && Number.isFinite(eLng)) {
@@ -680,6 +714,12 @@
                     
                     const catObj = categories.find(c => c.id === item.category) || categories.find(c => c.id === 'etc');
 
+                    // 별점 표시
+                    let starDisplay = '';
+                    if (item.rating > 0) {
+                        starDisplay = `<div class="text-amber-400 text-xs mt-1"><i class="fa-solid fa-star mr-1"></i>${item.rating.toFixed(1)}</div>`;
+                    }
+
                     el.innerHTML = `
                         <div class="flex items-start gap-3">
                             <div class="text-xl w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-slate-500">
@@ -687,6 +727,7 @@
                             </div>
                             <div class="flex-1">
                                 <h4 class="font-bold text-slate-800">${item.place}</h4>
+                                ${starDisplay}
                                 <p class="text-xs text-slate-400 mt-1 truncate"><i class="fa-solid fa-map-pin mr-1"></i>${item.address || '-'}</p>
                                 <p class="text-sm text-slate-600 mt-1">${item.memo || ''}</p>
                             </div>
@@ -721,12 +762,11 @@
                         iconAnchor: [16, 16]
                     });
                     const marker = L.marker([itemLat, itemLng], {icon: markerIcon}).addTo(markersLayer);
-                    marker.bindPopup(`<div class="text-center font-bold text-sm p-2">${item.place}<br><span class="text-xs font-normal text-slate-500">Day ${currentDay} 후보</span></div>`);
+                    marker.bindPopup(generatePopupContent(item));
                 }
             });
         }
 
-        // Deletion Functions
         window.deleteCandidate = async (id) => {
             if(confirm("이 후보 장소를 삭제하시겠습니까?")) await deleteDoc(doc(db, 'trips', appId, 'candidates', id));
         }
@@ -758,8 +798,6 @@
             L.control.zoom({ position: 'bottomright' }).addTo(map);
             markersLayer = L.layerGroup().addTo(map);
             pathLayer = L.layerGroup().addTo(map);
-
-            // Removed click listener to disable adding places by touching map
             
             map.on('moveend', function() {
                 const center = map.getCenter();
@@ -770,6 +808,23 @@
         function renderDayTabs() {
             const container = document.getElementById('dayTabs');
             container.innerHTML = '';
+            
+            // 전체 일정 버튼 추가
+            const allBtn = document.createElement('button');
+            const isAllActive = currentDay === 'all';
+            allBtn.className = `px-5 py-2 text-sm font-bold rounded-full whitespace-nowrap transition-all duration-200 border ${isAllActive ? 'bg-primary text-white border-primary shadow-md transform scale-105' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:border-slate-300'}`;
+            allBtn.innerText = `전체 일정`;
+            allBtn.onclick = () => { 
+                currentDay = 'all'; 
+                isFirstLoad = false;
+                document.getElementById('candidateDayDisplay').innerText = 'All';
+                renderDayTabs(); 
+                subscribeToItinerary(); 
+                // 후보 장소는 Day별로 보는게 일반적이므로 리셋하거나 전체 표시 (여기선 전체로 처리)
+                subscribeToCandidates(); 
+            };
+            container.appendChild(allBtn);
+
             for(let i=1; i<=totalDays; i++) {
                 const btn = document.createElement('button');
                 const isActive = currentDay === i;
@@ -800,7 +855,23 @@
             `).join('');
         }
 
-        // Function to fetch address from lat/lng (Reverse Geocoding)
+        // --- 평점(Slider) UI ---
+        function setupRatingUI() {
+            const slider = document.getElementById('ratingSlider');
+            const display = document.getElementById('ratingValueDisplay');
+
+            slider.addEventListener('input', (e) => {
+                display.innerText = parseFloat(e.target.value).toFixed(1);
+            });
+        }
+
+        function setRatingValue(val) {
+             const slider = document.getElementById('ratingSlider');
+             const display = document.getElementById('ratingValueDisplay');
+             slider.value = val;
+             display.innerText = parseFloat(val).toFixed(1);
+        }
+
         window.fetchAddress = async (lat, lng) => {
             document.getElementById('addAddress').value = "주소 검색 중...";
             try {
@@ -833,6 +904,12 @@
             document.getElementById('addAddress').value = '위치 확인 중...';
             document.getElementById('move_walk').checked = true; 
             
+            // 이미지/평점 초기화
+            document.getElementById('imgUrl1').value = '';
+            document.getElementById('imgUrl2').value = '';
+            document.getElementById('imgUrl3').value = '';
+            setRatingValue(0);
+
             const pickerRadios = document.querySelectorAll('input[name="picker"]');
             pickerRadios.forEach(r => r.checked = false);
             document.getElementById('picker_common').checked = true; 
@@ -845,7 +922,6 @@
             window.currentCurrency = 'JPY'; 
             window.updateDynamicFields(targetCat);
             
-            // Allow 0 as valid coordinate
             if (lat === null || lat === undefined || lng === null || lng === undefined) {
                 tempLatLng = null; 
                 document.getElementById('addAddress').value = '직접 입력';
@@ -868,7 +944,17 @@
             const address = document.getElementById('addAddress').value;
             const selectedCatId = document.querySelector('input[name="category"]:checked').value;
             const categoryObj = categories.find(c => c.id === selectedCatId);
+            const rating = parseFloat(document.getElementById('ratingSlider').value) || 0;
             
+            // 이미지 URL 수집
+            const images = [];
+            const img1 = document.getElementById('imgUrl1').value.trim();
+            const img2 = document.getElementById('imgUrl2').value.trim();
+            const img3 = document.getElementById('imgUrl3').value.trim();
+            if(img1) images.push(img1);
+            if(img2) images.push(img2);
+            if(img3) images.push(img3);
+
             let picker = 'common';
             const checkedPicker = document.querySelector('input[name="picker"]:checked');
             if (checkedPicker) picker = checkedPicker.value;
@@ -923,11 +1009,16 @@
                 depTime, arrTime, 
                 checkIn, checkOut, 
                 menu, isReserved, flightNum,
+                rating, images, 
                 updatedAt: new Date().toISOString()
             };
 
             if(!editingId) {
-                docData.day = currentDay;
+                // 전체 일정 모드에서 추가할 경우 기본값은 1일차로 설정 (사용자가 신경써야 함)
+                // 하지만 currentDay가 'all'일 때는 1로 강제하거나, Day 선택 기능을 추가해야 함. 
+                // 현재 UI상 탭을 'all'로 둔 상태에서 추가하면 currentDay='all'이 들어갈 수 있음 -> 오류 가능성
+                // 안전장치: currentDay가 'all'이면 1로 설정
+                docData.day = (currentDay === 'all') ? 1 : currentDay;
                 docData.createdAt = new Date().toISOString();
             }
 
@@ -957,8 +1048,6 @@
             const query = document.getElementById('searchAddressInput').value;
             if(!query) return alert("검색어를 입력하세요");
             try {
-                // Fixed Search: remove accept-language restriction to allow better English match, or use both
-                // Using q=... allows freeform search. addressdetails=1 gives details.
                 const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&addressdetails=1`);
                 const data = await res.json();
                 
@@ -1092,6 +1181,55 @@
         
         function grantAdminAccess() { isAdmin = true; updateAdminUI(); subscribeToItinerary(); subscribeToCandidates(); }
 
+        // --- 팝업 이미지 제어 함수 ---
+        window.changePopupImage = (itemId, direction) => {
+            const item = window.tripItems.find(i => i.id === itemId) || window.candidateItems.find(i => i.id === itemId);
+            if (!item || !item.images || item.images.length === 0) return;
+
+            if (!window.popupImageStates[itemId]) window.popupImageStates[itemId] = 0;
+            
+            let newIndex = window.popupImageStates[itemId] + direction;
+            if (newIndex < 0) newIndex = item.images.length - 1;
+            if (newIndex >= item.images.length) newIndex = 0;
+            
+            window.popupImageStates[itemId] = newIndex;
+            
+            const imgEl = document.getElementById(`popup-img-${itemId}`);
+            if (imgEl) imgEl.src = item.images[newIndex];
+        };
+
+        function generatePopupContent(item) {
+             const catObj = categories.find(c => c.id === item.category) || categories.find(c => c.id === 'etc');
+             let starHtml = '';
+             if (item.rating > 0) {
+                 starHtml = `<div class="text-amber-400 text-sm mb-1"><i class="fa-solid fa-star mr-1"></i>${item.rating.toFixed(1)}</div>`;
+             }
+
+             // 이미지 캐러셀 HTML 생성
+             let imageHtml = '';
+             if (item.images && item.images.length > 0) {
+                 const currentIdx = window.popupImageStates[item.id] || 0;
+                 imageHtml = `
+                    <div class="relative w-full h-32 mb-2 bg-slate-100 rounded-lg overflow-hidden group">
+                        <img src="${item.images[currentIdx]}" id="popup-img-${item.id}" class="w-full h-full object-cover">
+                        ${item.images.length > 1 ? `
+                        <button onclick="window.changePopupImage('${item.id}', -1)" class="absolute left-1 top-1/2 transform -translate-y-1/2 carousel-btn"><i class="fa-solid fa-chevron-left"></i></button>
+                        <button onclick="window.changePopupImage('${item.id}', 1)" class="absolute right-1 top-1/2 transform -translate-y-1/2 carousel-btn"><i class="fa-solid fa-chevron-right"></i></button>
+                        ` : ''}
+                    </div>
+                 `;
+             }
+
+             return `
+                <div class="text-center p-3 font-sans w-[250px]">
+                    ${imageHtml}
+                    <div class="text-2xl mb-1">${item.categoryIcon || catObj.icon}</div>
+                    <h3 class="font-bold mb-1 text-slate-800 text-base leading-tight">${item.place}</h3>
+                    ${starHtml}
+                    ${item.memo ? `<p class="text-xs text-slate-500 mt-1 line-clamp-2">${item.memo}</p>` : ''}
+                </div>`;
+        }
+
         function subscribeToItinerary() {
             if (window.unsub) window.unsub();
             const colRef = collection(db, 'trips', appId, 'itineraries');
@@ -1107,197 +1245,274 @@
                     snapshot.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
                     window.tripItems = items; 
 
-                    const dayItems = items.filter(item => item.day === currentDay);
-                    const fixedItems = dayItems.filter(item => item.category === 'flight' || item.category === 'hotel')
-                                               .sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59'));
-                    const timelineItems = dayItems.filter(item => item.category !== 'flight' && item.category !== 'hotel')
-                                                 .sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59'));
+                    // 전체 일정 모드 vs 단일 일정 모드 분기
+                    if (currentDay === 'all') {
+                        let totalCostAllDays = 0;
+                        let allPathPoints = [];
 
-                    let totalDailyCost = 0;
-                    let pathPoints = []; 
+                        // 1일차부터 마지막 날까지 순회
+                        for (let d = 1; d <= totalDays; d++) {
+                            const dayItems = items.filter(item => item.day === d);
+                            // 시간순 정렬 (Flight/Hotel 우선 등 기존 로직 유지)
+                            const sortedItems = dayItems.sort((a, b) => {
+                                // Flight/Hotel 먼저, 그 다음 시간순
+                                const isFixedA = a.category === 'flight' || a.category === 'hotel';
+                                const isFixedB = b.category === 'flight' || b.category === 'hotel';
+                                if(isFixedA && !isFixedB) return -1;
+                                if(!isFixedA && isFixedB) return 1;
+                                return (a.time || '23:59').localeCompare(b.time || '23:59');
+                            });
 
-                    if (dayItems.length === 0) {
-                        listContainer.innerHTML = '<div class="flex flex-col items-center justify-center h-64 text-slate-300"><i class="fa-regular fa-map text-4xl mb-3"></i><p class="text-sm">일정이 비어있습니다.</p></div>';
-                        document.getElementById('dailySummary').classList.add('hidden');
-                    } else {
+                            if (sortedItems.length > 0) {
+                                // Day Header 추가
+                                const dayHeader = document.createElement('div');
+                                dayHeader.className = 'sticky top-0 bg-slate-100/90 backdrop-blur z-10 py-2 px-3 text-xs font-bold text-slate-500 uppercase tracking-wide border-y border-slate-200 mb-3';
+                                dayHeader.innerText = `Day ${d}`;
+                                listContainer.appendChild(dayHeader);
+
+                                sortedItems.forEach(item => {
+                                    // 비용 합산
+                                    totalCostAllDays += (item.cost || 0) + (item.moveCost || 0);
+
+                                    // 마커 및 경로 데이터 수집
+                                    const lat = parseFloat(item.lat);
+                                    const lng = parseFloat(item.lng);
+                                    if(Number.isFinite(lat) && Number.isFinite(lng)) {
+                                        allPathPoints.push({lat, lng});
+                                        // 마커 렌더링 (기존 로직 재사용 가능하나 간단하게 구현)
+                                        renderMarkerOnMap(item);
+                                    }
+                                    // 리스트 아이템 렌더링
+                                    renderListItem(item, listContainer);
+                                });
+                            }
+                        }
+
+                        // 전체 경로 그리기 (선명한 선)
+                        if (allPathPoints.length > 1) {
+                            L.polyline(allPathPoints, {
+                                color: '#6366f1', // Indigo-500
+                                weight: 4,        // 굵게
+                                opacity: 0.8,     // 선명하게
+                                lineCap: 'round',
+                                lineJoin: 'round'
+                            }).addTo(pathLayer);
+                            
+                            // 전체 경로가 보이도록 줌 조정
+                            const bounds = L.latLngBounds(allPathPoints);
+                            map.fitBounds(bounds, { padding: [50, 50] });
+                        }
+
+                        // 비용 요약 업데이트
                         document.getElementById('dailySummary').classList.remove('hidden');
-                        if (isFirstLoad) {
-                            const firstTarget = timelineItems[0] || fixedItems[0];
-                            if (firstTarget) {
-                                const tLat = parseFloat(firstTarget.lat);
-                                const tLng = parseFloat(firstTarget.lng);
-                                // Ensure strict finite number check
-                                if (Number.isFinite(tLat) && Number.isFinite(tLng)) {
-                                    try {
-                                        map.flyTo([tLat, tLng], 14, { duration: 1.5 });
-                                        isFirstLoad = false;
-                                    } catch (e) {
-                                        console.error("FlyTo Error:", e);
-                                        // Disable first load even on error to prevent loops
-                                        isFirstLoad = false;
+                        document.getElementById('dailyTotalJPY').innerText = `¥${totalCostAllDays.toLocaleString()}`;
+                        const totalKRW = Math.round(totalCostAllDays * EXCHANGE_RATE).toLocaleString();
+                        document.getElementById('dailyTotalKRW').innerText = `≈ ${totalKRW}원 (전체 일정)`;
+
+                    } else {
+                        // 기존 단일 Day 로직
+                        const dayItems = items.filter(item => item.day === currentDay);
+                        const fixedItems = dayItems.filter(item => item.category === 'flight' || item.category === 'hotel')
+                                                   .sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59'));
+                        const timelineItems = dayItems.filter(item => item.category !== 'flight' && item.category !== 'hotel')
+                                                      .sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59'));
+
+                        let totalDailyCost = 0;
+                        let pathPoints = []; 
+
+                        if (dayItems.length === 0) {
+                            listContainer.innerHTML = '<div class="flex flex-col items-center justify-center h-64 text-slate-300"><i class="fa-regular fa-map text-4xl mb-3"></i><p class="text-sm">일정이 비어있습니다.</p></div>';
+                            document.getElementById('dailySummary').classList.add('hidden');
+                        } else {
+                            document.getElementById('dailySummary').classList.remove('hidden');
+                            if (isFirstLoad) {
+                                const firstTarget = timelineItems[0] || fixedItems[0];
+                                if (firstTarget) {
+                                    const tLat = parseFloat(firstTarget.lat);
+                                    const tLng = parseFloat(firstTarget.lng);
+                                    if (Number.isFinite(tLat) && Number.isFinite(tLng)) {
+                                        try {
+                                            map.flyTo([tLat, tLng], 14, { duration: 1.5 });
+                                            isFirstLoad = false;
+                                        } catch (e) {
+                                            isFirstLoad = false;
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    const renderItem = (item, isFixed) => {
-                        try {
-                            const catObj = categories.find(c => c.id === item.category) || categories.find(c => c.id === 'etc');
-                            const isFlight = item.category === 'flight';
-                            const isHotel = item.category === 'hotel';
-
-                            if (!isFixed) {
-                                totalDailyCost += (item.cost || 0) + (item.moveCost || 0);
-                            }
-
-                            // Fix: Parse LatLng safely
-                            const itemLat = parseFloat(item.lat);
-                            const itemLng = parseFloat(item.lng);
-                            const hasLocation = Number.isFinite(itemLat) && Number.isFinite(itemLng);
-
-                            if (!isFixed && hasLocation) {
-                                pathPoints.push({
-                                    lat: itemLat, lng: itemLng, moveType: item.moveType || 'walk',
-                                    color: item.moveType === 'walk' ? '#94a3b8' : (item.moveType === 'bus' ? '#6366f1' : '#10b981')
-                                });
-                            }
-
-                            if (hasLocation) {
-                                const markerColor = isFlight ? '#6366f1' : (isHotel ? '#2563eb' : '#ffffff');
-                                const markerIcon = L.divIcon({
-                                    className: 'custom-div-icon',
-                                    html: `<div style="background-color: ${markerColor}; border: 2px solid white; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.2); width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 20px;">${item.categoryIcon || catObj.icon}</div>`,
-                                    iconSize: [40, 40],
-                                    iconAnchor: [20, 20],
-                                    popupAnchor: [0, -20]
-                                });
-                                const marker = L.marker([itemLat, itemLng], {icon: markerIcon}).addTo(markersLayer);
-                                marker.bindPopup(`<div class="text-center min-w-[160px] p-2 font-sans"><div class="text-2xl mb-2">${item.categoryIcon || catObj.icon}</div><h3 class="font-bold mb-1 text-slate-800 text-sm">${item.place}</h3></div>`, { className: 'rounded-xl shadow-xl border-0' });
-                            }
-
-                            let cardClasses = 'p-4 rounded-xl border shadow-sm transition group relative mb-3';
-                            let bgClass = 'bg-white';
-                            let borderClass = 'border-slate-200';
-                            let pickBadge = '';
-
-                            if (item.picker === 'juice') {
-                                bgClass = 'bg-orange-50';
-                                borderClass = 'border-orange-200';
-                                pickBadge = `<span class="text-[8px] font-bold text-orange-600 bg-white/80 px-1.5 py-0.5 rounded border border-orange-100 shadow-sm mr-1">Juice's Pick</span>`;
-                            } else if (item.picker === 'yumin') {
-                                bgClass = 'bg-indigo-50';
-                                borderClass = 'border-indigo-200';
-                                pickBadge = `<span class="text-[8px] font-bold text-indigo-600 bg-white/80 px-1.5 py-0.5 rounded border border-indigo-100 shadow-sm mr-1">Yumin's Pick</span>`;
-                            }
-
-                            if (isFixed) {
-                                 if (isFlight) {
-                                     bgClass = 'bg-indigo-50/60'; borderClass = 'border-indigo-200';
-                                 } else if (isHotel) {
-                                     bgClass = 'bg-blue-50/60'; borderClass = 'border-blue-200';
-                                 }
-                                 cardClasses += ` ${bgClass} ${borderClass}`;
-                            } else {
-                                cardClasses += ` timeline-item pl-16 hover:shadow-md ${bgClass} ${borderClass}`;
-                            }
+                        // 통합 렌더링 함수 사용
+                        fixedItems.forEach(item => {
+                            totalDailyCost += (item.cost || 0) + (item.moveCost || 0);
+                            renderMarkerOnMap(item);
+                            renderListItem(item, listContainer);
                             
-                            const el = document.createElement('div');
-                            el.className = cardClasses;
-                            el.onclick = () => { if(hasLocation) map.flyTo([itemLat, itemLng], 16); };
-                            
-                            let editBtn = '';
-                            if (isAdmin) {
-                                editBtn = `
-                                <div class="absolute top-6 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition z-20">
-                                    <button onclick="event.stopPropagation(); window.editItem('${item.id}')" class="text-slate-400 hover:text-indigo-500 p-1"><i class="fa-solid fa-pen"></i></button>
-                                    <button onclick="event.stopPropagation(); window.deleteItem('${item.id}')" class="text-slate-400 hover:text-rose-500 p-1"><i class="fa-solid fa-trash-can"></i></button>
-                                </div>`;
+                            const lat = parseFloat(item.lat);
+                            const lng = parseFloat(item.lng);
+                            if(Number.isFinite(lat) && Number.isFinite(lng)) pathPoints.push({lat, lng, moveType: 'walk'}); // Fixed items default walk for path logic
+                        });
+
+                        timelineItems.forEach(item => {
+                            totalDailyCost += (item.cost || 0) + (item.moveCost || 0);
+                            renderMarkerOnMap(item);
+                            renderListItem(item, listContainer);
+
+                            const lat = parseFloat(item.lat);
+                            const lng = parseFloat(item.lng);
+                            if(Number.isFinite(lat) && Number.isFinite(lng)) pathPoints.push({lat, lng, moveType: item.moveType || 'walk'});
+                        });
+
+                        document.getElementById('dailyTotalJPY').innerText = `¥${totalDailyCost.toLocaleString()}`;
+                        const totalKRW = Math.round(totalDailyCost * EXCHANGE_RATE).toLocaleString();
+                        document.getElementById('dailyTotalKRW').innerText = `≈ ${totalKRW}원`;
+
+                        if (pathPoints.length > 1) {
+                            for (let i = 0; i < pathPoints.length - 1; i++) {
+                                const start = pathPoints[i];
+                                const end = pathPoints[i+1];
+                                const color = end.moveType === 'bus' ? '#6366f1' : (end.moveType === 'subway' ? '#10b981' : '#94a3b8');
+                                L.polyline([[start.lat, start.lng], [end.lat, end.lng]], {
+                                    color: color, weight: 4, opacity: 0.8, dashArray: end.moveType === 'walk' ? '5, 10' : null, lineCap: 'round'
+                                }).addTo(pathLayer);
                             }
-
-                            let pinBadge = '';
-                            if (isFixed) {
-                                pinBadge = `<div class="absolute -top-2 -right-2 bg-white text-indigo-500 w-7 h-7 flex items-center justify-center rounded-full border border-indigo-100 shadow-sm z-20" title="Fixed Schedule"><i class="fa-solid fa-thumbtack transform rotate-45 text-xs"></i></div>`;
-                            }
-
-                            let timeDisplay = item.time || '';
-                            if (isFlight) timeDisplay = `${item.depTime || '?'} <i class="fa-solid fa-arrow-right text-[10px] mx-1"></i> ${item.arrTime || '?'}`;
-                            else if (isHotel) timeDisplay = `In ${item.checkIn || '-'} / Out ${item.checkOut || '-'}`;
-
-                            let costDisplay = '';
-                            const totalItemCost = (item.cost || 0);
-                            if (totalItemCost > 0) {
-                                const krw = Math.round(totalItemCost * EXCHANGE_RATE).toLocaleString();
-                                costDisplay = `<span class="text-indigo-600 font-bold text-sm bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">¥${totalItemCost.toLocaleString()} <span class="text-[10px] text-slate-400 font-normal">(약 ${krw}원)</span></span>`;
-                            }
-                            if(item.moveCost > 0) {
-                                const mKrw = Math.round(item.moveCost * EXCHANGE_RATE).toLocaleString();
-                                costDisplay += `<div class="text-[10px] text-slate-400 mt-0.5 ml-1"><i class="fa-solid fa-ticket mr-1"></i>이동: ¥${item.moveCost} (${mKrw}원)</div>`;
-                            }
-
-                            let tags = '';
-                            if (item.menu) tags += `<span class="bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded text-[10px] border border-orange-100 font-medium">🍽️ ${item.menu}</span> `;
-                            if (isHotel) {
-                                tags += item.isReserved 
-                                    ? `<span class="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded text-[10px] border border-emerald-100 font-bold">✅ 예약확정</span> ` 
-                                    : `<span class="bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded text-[10px] border border-rose-100 font-bold">⏳ 미예약</span> `;
-                            }
-                            if (item.flightNum) tags += `<span class="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[10px] border border-indigo-100 font-bold">✈️ ${item.flightNum}</span> `;
-
-                            let moveIcon = '';
-                            if(!isFixed && !isFlight) { 
-                                if(item.moveType === 'bus') moveIcon = '<i class="fa-solid fa-bus text-indigo-500 mr-1"></i>';
-                                else if(item.moveType === 'subway') moveIcon = '<i class="fa-solid fa-train-subway text-emerald-500 mr-1"></i>';
-                                else moveIcon = '<i class="fa-solid fa-person-walking text-slate-400 mr-1"></i>';
-                            }
-
-                            // 중복 pickBadge 제거: 하단 태그 영역에만 유지
-                            el.innerHTML = `
-                                ${pinBadge}
-                                <div class="${isFixed ? 'text-xl z-10 w-10 h-10 flex items-center justify-center bg-white rounded-full border border-white shadow-md mb-2' : 'text-xl z-10 w-9 h-9 flex items-center justify-center bg-white rounded-full border border-slate-100 shadow-sm absolute left-3 top-4'}">${item.categoryIcon || catObj.icon}</div>
-                                <div class="${isFixed ? 'flex flex-col' : ''}">
-                                    <div class="flex justify-between items-start mb-1 w-full gap-2">
-                                        <h4 class="font-bold text-slate-800 text-base flex-1 leading-tight ${isFlight ? 'text-indigo-800' : ''} ${isHotel ? 'text-blue-800' : ''}">${item.place}</h4>
-                                        <span class="text-xs font-bold bg-white/80 border border-slate-100 text-slate-600 px-2 py-1 rounded-lg shadow-sm whitespace-nowrap shrink-0 ml-auto">${timeDisplay || '-'}</span>
-                                    </div>
-                                    <p class="text-xs text-slate-400 truncate">${item.address || ''}</p>
-                                    ${moveIcon ? `<div class="text-[10px] text-slate-500 mb-1 flex items-center bg-slate-50 inline-block px-1.5 rounded border border-slate-100 w-fit mt-1">${moveIcon} 이동</div>` : ''}
-                                    <div class="flex flex-wrap gap-1 mb-1 items-center">
-                                        ${pickBadge}
-                                        ${tags}
-                                    </div>
-                                    ${costDisplay ? `<div class="flex flex-col mt-1">${costDisplay}</div>` : ''}
-                                    ${item.memo ? `<p class="text-sm text-slate-600 mt-2 bg-slate-50/50 p-2 rounded-lg border border-slate-100/50">${item.memo}</p>` : ''}
-                                </div>
-                                ${editBtn}
-                            `;
-                            listContainer.appendChild(el);
-                        } catch (e) {
-                            console.error("Render Item Error:", e, item);
-                        }
-                    };
-
-                    fixedItems.forEach(item => renderItem(item, true));
-                    timelineItems.forEach(item => renderItem(item, false));
-
-                    document.getElementById('dailyTotalJPY').innerText = `¥${totalDailyCost.toLocaleString()}`;
-                    const totalKRW = Math.round(totalDailyCost * EXCHANGE_RATE).toLocaleString();
-                    document.getElementById('dailyTotalKRW').innerText = `≈ ${totalKRW}원`;
-
-                    if (pathPoints.length > 1) {
-                        for (let i = 0; i < pathPoints.length - 1; i++) {
-                            const start = pathPoints[i];
-                            const end = pathPoints[i+1];
-                            const color = end.moveType === 'bus' ? '#6366f1' : (end.moveType === 'subway' ? '#10b981' : '#94a3b8');
-                            L.polyline([[start.lat, start.lng], [end.lat, end.lng]], {
-                                color: color, weight: 3, opacity: 0.7, dashArray: end.moveType === 'walk' ? '5, 10' : null, lineCap: 'round'
-                            }).addTo(pathLayer);
                         }
                     }
+
                 } catch(err) {
                     console.error("Snapshot Error:", err);
                 }
             });
+        }
+
+        // Helper: 지도에 마커 찍기
+        function renderMarkerOnMap(item) {
+            const catObj = categories.find(c => c.id === item.category) || categories.find(c => c.id === 'etc');
+            const isFlight = item.category === 'flight';
+            const isHotel = item.category === 'hotel';
+            const itemLat = parseFloat(item.lat);
+            const itemLng = parseFloat(item.lng);
+
+            if (Number.isFinite(itemLat) && Number.isFinite(itemLng)) {
+                const markerColor = isFlight ? '#6366f1' : (isHotel ? '#2563eb' : '#ffffff');
+                const markerIcon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div style="background-color: ${markerColor}; border: 2px solid white; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.2); width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 20px;">${item.categoryIcon || catObj.icon}</div>`,
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 20],
+                    popupAnchor: [0, -20]
+                });
+                const marker = L.marker([itemLat, itemLng], {icon: markerIcon}).addTo(markersLayer);
+                marker.bindPopup(generatePopupContent(item), { className: 'rounded-xl shadow-xl border-0' });
+            }
+        }
+
+        // Helper: 리스트 아이템 렌더링
+        function renderListItem(item, container) {
+            const catObj = categories.find(c => c.id === item.category) || categories.find(c => c.id === 'etc');
+            const isFixed = item.category === 'flight' || item.category === 'hotel';
+            const isFlight = item.category === 'flight';
+            const isHotel = item.category === 'hotel';
+
+            let cardClasses = 'p-4 rounded-xl border shadow-sm transition group relative mb-3';
+            let bgClass = 'bg-white';
+            let borderClass = 'border-slate-200';
+            let pickBadge = '';
+
+            if (item.picker === 'juice') {
+                bgClass = 'bg-orange-50';
+                borderClass = 'border-orange-200';
+                pickBadge = `<span class="text-[8px] font-bold text-orange-600 bg-white/80 px-1.5 py-0.5 rounded border border-orange-100 shadow-sm mr-1">Juice's Pick</span>`;
+            } else if (item.picker === 'yumin') {
+                bgClass = 'bg-indigo-50';
+                borderClass = 'border-indigo-200';
+                pickBadge = `<span class="text-[8px] font-bold text-indigo-600 bg-white/80 px-1.5 py-0.5 rounded border border-indigo-100 shadow-sm mr-1">Yumin's Pick</span>`;
+            }
+
+            if (isFixed) {
+                 if (isFlight) {
+                     bgClass = 'bg-indigo-50/60'; borderClass = 'border-indigo-200';
+                 } else if (isHotel) {
+                     bgClass = 'bg-blue-50/60'; borderClass = 'border-blue-200';
+                 }
+                 cardClasses += ` ${bgClass} ${borderClass}`;
+            } else {
+                cardClasses += ` timeline-item pl-16 hover:shadow-md ${bgClass} ${borderClass}`;
+            }
+            
+            const el = document.createElement('div');
+            el.className = cardClasses;
+            const itemLat = parseFloat(item.lat);
+            const itemLng = parseFloat(item.lng);
+            const hasLocation = Number.isFinite(itemLat) && Number.isFinite(itemLng);
+            el.onclick = () => { if(hasLocation) map.flyTo([itemLat, itemLng], 16); };
+            
+            let editBtn = '';
+            if (isAdmin) {
+                editBtn = `
+                <div class="absolute top-6 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition z-20">
+                    <button onclick="event.stopPropagation(); window.editItem('${item.id}')" class="text-slate-400 hover:text-indigo-500 p-1"><i class="fa-solid fa-pen"></i></button>
+                    <button onclick="event.stopPropagation(); window.deleteItem('${item.id}')" class="text-slate-400 hover:text-rose-500 p-1"><i class="fa-solid fa-trash-can"></i></button>
+                </div>`;
+            }
+
+            let pinBadge = '';
+            if (isFixed) {
+                pinBadge = `<div class="absolute -top-2 -right-2 bg-white text-indigo-500 w-7 h-7 flex items-center justify-center rounded-full border border-indigo-100 shadow-sm z-20" title="Fixed Schedule"><i class="fa-solid fa-thumbtack transform rotate-45 text-xs"></i></div>`;
+            }
+
+            let timeDisplay = item.time || '';
+            if (isFlight) timeDisplay = `${item.depTime || '?'} <i class="fa-solid fa-arrow-right text-[10px] mx-1"></i> ${item.arrTime || '?'}`;
+            else if (isHotel) timeDisplay = `In ${item.checkIn || '-'} / Out ${item.checkOut || '-'}`;
+
+            let costDisplay = '';
+            const totalItemCost = (item.cost || 0);
+            if (totalItemCost > 0) {
+                const krw = Math.round(totalItemCost * EXCHANGE_RATE).toLocaleString();
+                costDisplay = `<span class="text-indigo-600 font-bold text-sm bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">¥${totalItemCost.toLocaleString()} <span class="text-[10px] text-slate-400 font-normal">(약 ${krw}원)</span></span>`;
+            }
+            if(item.moveCost > 0) {
+                const mKrw = Math.round(item.moveCost * EXCHANGE_RATE).toLocaleString();
+                costDisplay += `<div class="text-[10px] text-slate-400 mt-0.5 ml-1"><i class="fa-solid fa-ticket mr-1"></i>이동: ¥${item.moveCost} (${mKrw}원)</div>`;
+            }
+
+            let tags = '';
+            if (item.menu) tags += `<span class="bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded text-[10px] border border-orange-100 font-medium">🍽️ ${item.menu}</span> `;
+            if (isHotel) {
+                tags += item.isReserved 
+                    ? `<span class="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded text-[10px] border border-emerald-100 font-bold">✅ 예약확정</span> ` 
+                    : `<span class="bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded text-[10px] border border-rose-100 font-bold">⏳ 미예약</span> `;
+            }
+            if (item.flightNum) tags += `<span class="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[10px] border border-indigo-100 font-bold">✈️ ${item.flightNum}</span> `;
+            if (item.rating > 0) tags += `<span class="text-amber-400 text-[10px] font-bold"><i class="fa-solid fa-star"></i> ${item.rating.toFixed(1)}</span>`;
+
+            let moveIcon = '';
+            if(!isFixed && !isFlight) { 
+                if(item.moveType === 'bus') moveIcon = '<i class="fa-solid fa-bus text-indigo-500 mr-1"></i>';
+                else if(item.moveType === 'subway') moveIcon = '<i class="fa-solid fa-train-subway text-emerald-500 mr-1"></i>';
+                else moveIcon = '<i class="fa-solid fa-person-walking text-slate-400 mr-1"></i>';
+            }
+
+            el.innerHTML = `
+                ${pinBadge}
+                <div class="${isFixed ? 'text-xl z-10 w-10 h-10 flex items-center justify-center bg-white rounded-full border border-white shadow-md mb-2' : 'text-xl z-10 w-9 h-9 flex items-center justify-center bg-white rounded-full border border-slate-100 shadow-sm absolute left-3 top-4'}">${item.categoryIcon || catObj.icon}</div>
+                <div class="${isFixed ? 'flex flex-col' : ''}">
+                    <div class="flex justify-between items-start mb-1 w-full gap-2">
+                        <h4 class="font-bold text-slate-800 text-base flex-1 leading-tight ${isFlight ? 'text-indigo-800' : ''} ${isHotel ? 'text-blue-800' : ''}">${item.place}</h4>
+                        <span class="text-xs font-bold bg-white/80 border border-slate-100 text-slate-600 px-2 py-1 rounded-lg shadow-sm whitespace-nowrap shrink-0 ml-auto">${timeDisplay || '-'}</span>
+                    </div>
+                    <p class="text-xs text-slate-400 truncate">${item.address || ''}</p>
+                    ${moveIcon ? `<div class="text-[10px] text-slate-500 mb-1 flex items-center bg-slate-50 inline-block px-1.5 rounded border border-slate-100 w-fit mt-1">${moveIcon} 이동</div>` : ''}
+                    <div class="flex flex-wrap gap-1 mb-1 items-center">
+                        ${pickBadge}
+                        ${tags}
+                    </div>
+                    ${costDisplay ? `<div class="flex flex-col mt-1">${costDisplay}</div>` : ''}
+                    ${item.memo ? `<p class="text-sm text-slate-600 mt-2 bg-slate-50/50 p-2 rounded-lg border border-slate-100/50">${item.memo}</p>` : ''}
+                </div>
+                ${editBtn}
+            `;
+            container.appendChild(el);
         }
 
         document.getElementById('openSidebar').onclick = () => document.getElementById('sidebar').classList.remove('-translate-x-full');
